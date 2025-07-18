@@ -2582,9 +2582,187 @@ class DesignerModal {
             e.preventDefault();
             dropZone.classList.remove('drag-over');
             
-            const controlData = JSON.parse(e.dataTransfer.getData('application/json'));
-            this.addControlToCanvas(controlData);
+            // 检查是否是从控件库拖拽的新控件
+            const controlData = e.dataTransfer.getData('application/json');
+            if (controlData) {
+                // 从控件库拖拽，计算放置位置
+                const dropZoneRect = dropZone.getBoundingClientRect();
+                const position = {
+                    x: e.clientX - dropZoneRect.left,
+                    y: e.clientY - dropZoneRect.top
+                };
+                
+                this.addControlToCanvas(JSON.parse(controlData), position);
+            }
         });
+        
+        // 绑定画布全局鼠标事件用于拖拽
+        this.bindCanvasMouseEvents();
+    }
+    
+    // 绑定画布鼠标事件
+    bindCanvasMouseEvents() {
+        const dropZone = this.modal.querySelector('#stqsb-drop-zone');
+        if (!dropZone) return;
+        
+        let isDragging = false;
+        let draggedControl = null;
+        let draggedElement = null;
+        let dragStartPos = null;
+        let dragOffset = null;
+        
+        // 鼠标按下事件处理
+        dropZone.addEventListener('mousedown', (e) => {
+            const controlElement = e.target.closest('.stqsb-canvas-control');
+            if (!controlElement) return;
+            
+            const controlId = controlElement.dataset.controlId;
+            const controlInstance = this.canvasControls.find(c => c.id === controlId);
+            
+            if (!controlInstance) return;
+            
+            // 检查是否点击了移动按钮
+            const moveButton = e.target.closest('.stqsb-control-move');
+            if (!moveButton) return;
+            
+            e.preventDefault();
+            e.stopPropagation();
+            
+            isDragging = true;
+            draggedControl = controlInstance;
+            draggedElement = controlElement;
+            
+            const rect = controlElement.getBoundingClientRect();
+            const dropZoneRect = dropZone.getBoundingClientRect();
+            
+            dragStartPos = {
+                x: e.clientX,
+                y: e.clientY
+            };
+            
+            dragOffset = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+            
+            // 添加拖拽状态
+            controlElement.classList.add('dragging');
+            dropZone.classList.add('dragging-active');
+            
+            // 设置鼠标样式
+            document.body.style.cursor = 'grabbing';
+            
+            this.log('开始拖拽控件:', controlInstance.id);
+        });
+        
+        // 鼠标移动事件处理
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging || !draggedElement) return;
+            
+            e.preventDefault();
+            
+            const dropZoneRect = dropZone.getBoundingClientRect();
+            
+            // 计算新位置
+            const newX = e.clientX - dropZoneRect.left - dragOffset.x;
+            const newY = e.clientY - dropZoneRect.top - dragOffset.y;
+            
+            // 边界检查
+            const constrainedX = Math.max(0, Math.min(newX, dropZoneRect.width - draggedElement.offsetWidth));
+            const constrainedY = Math.max(0, Math.min(newY, dropZoneRect.height - draggedElement.offsetHeight));
+            
+            // 更新位置
+            draggedElement.style.left = `${constrainedX}px`;
+            draggedElement.style.top = `${constrainedY}px`;
+            
+            // 显示网格对齐辅助线
+            this.showGridHelpers(constrainedX, constrainedY);
+        });
+        
+        // 鼠标抬起事件处理
+        document.addEventListener('mouseup', (e) => {
+            if (!isDragging || !draggedControl || !draggedElement) return;
+            
+            e.preventDefault();
+            
+            const dropZoneRect = dropZone.getBoundingClientRect();
+            
+            // 计算最终位置
+            const finalX = e.clientX - dropZoneRect.left - dragOffset.x;
+            const finalY = e.clientY - dropZoneRect.top - dragOffset.y;
+            
+            // 边界检查
+            const constrainedX = Math.max(0, Math.min(finalX, dropZoneRect.width - draggedElement.offsetWidth));
+            const constrainedY = Math.max(0, Math.min(finalY, dropZoneRect.height - draggedElement.offsetHeight));
+            
+            // 网格对齐
+            const gridSize = 20;
+            const snappedX = Math.round(constrainedX / gridSize) * gridSize;
+            const snappedY = Math.round(constrainedY / gridSize) * gridSize;
+            
+            // 更新控件位置数据
+            draggedControl.position = {
+                x: snappedX,
+                y: snappedY
+            };
+            
+            // 应用最终位置
+            draggedElement.style.left = `${snappedX}px`;
+            draggedElement.style.top = `${snappedY}px`;
+            
+            // 清除拖拽状态
+            draggedElement.classList.remove('dragging');
+            dropZone.classList.remove('dragging-active');
+            
+            // 隐藏网格辅助线
+            this.hideGridHelpers();
+            
+            // 恢复鼠标样式
+            document.body.style.cursor = '';
+            
+            this.log('控件拖拽完成:', draggedControl.id, draggedControl.position);
+            
+            // 重置拖拽状态
+            isDragging = false;
+            draggedControl = null;
+            draggedElement = null;
+            dragStartPos = null;
+            dragOffset = null;
+        });
+    }
+    
+    // 显示网格对齐辅助线
+    showGridHelpers(x, y) {
+        const dropZone = this.modal.querySelector('#stqsb-drop-zone');
+        if (!dropZone) return;
+        
+        const gridSize = 20;
+        const snappedX = Math.round(x / gridSize) * gridSize;
+        const snappedY = Math.round(y / gridSize) * gridSize;
+        
+        // 移除现有辅助线
+        this.hideGridHelpers();
+        
+        // 创建水平辅助线
+        const horizontalHelper = document.createElement('div');
+        horizontalHelper.className = 'stqsb-grid-helper horizontal';
+        horizontalHelper.style.top = `${snappedY}px`;
+        dropZone.appendChild(horizontalHelper);
+        
+        // 创建垂直辅助线
+        const verticalHelper = document.createElement('div');
+        verticalHelper.className = 'stqsb-grid-helper vertical';
+        verticalHelper.style.left = `${snappedX}px`;
+        dropZone.appendChild(verticalHelper);
+    }
+    
+    // 隐藏网格辅助线
+    hideGridHelpers() {
+        const dropZone = this.modal.querySelector('#stqsb-drop-zone');
+        if (!dropZone) return;
+        
+        const helpers = dropZone.querySelectorAll('.stqsb-grid-helper');
+        helpers.forEach(helper => helper.remove());
     }
     
     // 加载控件库
@@ -2657,11 +2835,31 @@ class DesignerModal {
     }
     
     // 添加控件到画布
-    addControlToCanvas(controlData) {
+    addControlToCanvas(controlData, position = null) {
         const { category, type, control } = controlData;
         
         // 生成唯一ID
         const controlId = `stqsb-control-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        // 计算默认位置
+        let defaultPosition = position;
+        if (!defaultPosition) {
+            // 如果没有指定位置，自动计算一个合适的位置
+            const canvasRect = this.modal.querySelector('#stqsb-drop-zone').getBoundingClientRect();
+            const canvasControls = this.canvasControls;
+            const controlsCount = canvasControls.length;
+            
+            // 使用网格布局来放置新控件
+            const gridSize = 20; // 网格大小
+            const offsetX = 20; // 左边距
+            const offsetY = 20; // 上边距
+            
+            // 计算位置，避免重叠
+            let x = offsetX + (controlsCount % 4) * 160; // 每行4个控件
+            let y = offsetY + Math.floor(controlsCount / 4) * 80; // 每80px一行
+            
+            defaultPosition = { x, y };
+        }
         
         // 创建控件实例
         const controlInstance = {
@@ -2669,7 +2867,8 @@ class DesignerModal {
             category: category,
             type: type,
             control: control,
-            properties: this.getDefaultProperties(control)
+            properties: this.getDefaultProperties(control),
+            position: defaultPosition
         };
         
         // 添加到画布控件列表
@@ -2720,6 +2919,11 @@ class DesignerModal {
         controlElement.className = 'stqsb-canvas-control';
         controlElement.dataset.controlId = controlInstance.id;
         controlElement.draggable = true; // 启用拖动
+        
+        // 设置绝对定位
+        controlElement.style.left = `${controlInstance.position.x}px`;
+        controlElement.style.top = `${controlInstance.position.y}px`;
+        
         controlElement.innerHTML = `
             <div class="stqsb-control-wrapper">
                 <div class="stqsb-control-actions">
@@ -2748,15 +2952,6 @@ class DesignerModal {
     
     // 绑定控件事件
     bindControlEvents(element, controlInstance) {
-        // 移动按钮
-        const moveButton = element.querySelector('.stqsb-control-move');
-        if (moveButton) {
-            moveButton.addEventListener('mousedown', (e) => {
-                e.preventDefault();
-                this.startControlDrag(element, controlInstance, e);
-            });
-        }
-        
         // 编辑按钮
         const editButton = element.querySelector('.stqsb-control-edit');
         if (editButton) {
@@ -2777,54 +2972,6 @@ class DesignerModal {
         element.addEventListener('click', (e) => {
             if (e.target.closest('.stqsb-control-actions')) return;
             this.selectControl(controlInstance);
-        });
-        
-        // 拖动开始
-        element.addEventListener('dragstart', (e) => {
-            this.isDraggingControl = true;
-            this.draggedControl = controlInstance;
-            element.classList.add('dragging');
-            
-            // 设置拖动数据
-            e.dataTransfer.setData('text/plain', controlInstance.id);
-            e.dataTransfer.effectAllowed = 'move';
-            
-            this.log('开始拖动控件:', controlInstance.id);
-        });
-        
-        // 拖动结束
-        element.addEventListener('dragend', (e) => {
-            this.isDraggingControl = false;
-            this.draggedControl = null;
-            element.classList.remove('dragging');
-            
-            this.log('拖动结束:', controlInstance.id);
-        });
-        
-        // 拖动经过
-        element.addEventListener('dragover', (e) => {
-            if (this.isDraggingControl && this.draggedControl && 
-                this.draggedControl.id !== controlInstance.id) {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-                element.classList.add('drag-target');
-            }
-        });
-        
-        // 拖动离开
-        element.addEventListener('dragleave', (e) => {
-            element.classList.remove('drag-target');
-        });
-        
-        // 拖动释放
-        element.addEventListener('drop', (e) => {
-            e.preventDefault();
-            element.classList.remove('drag-target');
-            
-            if (this.isDraggingControl && this.draggedControl && 
-                this.draggedControl.id !== controlInstance.id) {
-                this.reorderControls(this.draggedControl, controlInstance);
-            }
         });
     }
     
@@ -2863,68 +3010,6 @@ class DesignerModal {
         }
         
         this.log('控件已删除:', controlInstance);
-    }
-    
-    // 开始控件拖动
-    startControlDrag(element, controlInstance, event) {
-        this.isDraggingControl = true;
-        this.draggedControl = controlInstance;
-        this.draggedElement = element;
-        
-        element.classList.add('dragging');
-        
-        // 创建拖动占位符
-        this.createDragPlaceholder(element);
-        
-        this.log('开始拖动控件:', controlInstance.id);
-    }
-    
-    // 创建拖动占位符
-    createDragPlaceholder(element) {
-        const placeholder = document.createElement('div');
-        placeholder.className = 'stqsb-drag-placeholder';
-        placeholder.innerHTML = '<div class="placeholder-text">拖动到这里</div>';
-        placeholder.style.cssText = `
-            height: ${element.offsetHeight}px;
-            border: 2px dashed #667eea;
-            border-radius: 8px;
-            background: rgba(102, 126, 234, 0.1);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #667eea;
-            font-size: 14px;
-            margin: 5px 0;
-            transition: all 0.3s ease;
-        `;
-        
-        // 插入占位符
-        element.parentNode.insertBefore(placeholder, element);
-        element.style.display = 'none';
-        
-        this.dragPlaceholder = placeholder;
-    }
-    
-    // 重排序控件
-    reorderControls(draggedControl, targetControl) {
-        this.log('重排序控件:', draggedControl.id, '->', targetControl.id);
-        
-        // 获取当前索引
-        const draggedIndex = this.canvasControls.findIndex(c => c.id === draggedControl.id);
-        const targetIndex = this.canvasControls.findIndex(c => c.id === targetControl.id);
-        
-        if (draggedIndex === -1 || targetIndex === -1) return;
-        
-        // 从数组中移除被拖动的控件
-        const [movedControl] = this.canvasControls.splice(draggedIndex, 1);
-        
-        // 插入到目标位置
-        this.canvasControls.splice(targetIndex, 0, movedControl);
-        
-        // 重新渲染画布
-        this.rerenderCanvas();
-        
-        this.log('控件重排序完成');
     }
     
     // 重新渲染画布
@@ -3100,11 +3185,276 @@ class DesignerModal {
             return;
         }
         
-        // 生成模板
-        const template = this.generateTemplate();
+        // 如果有多个控件，显示布局选择对话框
+        if (this.canvasControls.length > 1) {
+            this.showLayoutSelectionDialog();
+        } else {
+            // 单个控件直接预览
+            const template = this.generateTemplate();
+            this.showPreviewWindow(template);
+        }
+    }
+    
+    // 显示布局选择对话框
+    showLayoutSelectionDialog(action = 'preview') {
+        const dialog = document.createElement('div');
+        dialog.className = 'stqsb-layout-dialog';
+        dialog.innerHTML = `
+            <div class="stqsb-layout-dialog-overlay">
+                <div class="stqsb-layout-dialog-content">
+                    <h3>选择HTML布局方式</h3>
+                    <div class="stqsb-layout-options">
+                        <div class="stqsb-layout-option" data-layout="simple">
+                            <div class="stqsb-layout-preview">
+                                <div class="stqsb-layout-demo-simple">
+                                    <span>控件1</span>
+                                    <span>控件2</span>
+                                    <span>控件3</span>
+                                </div>
+                            </div>
+                            <h4>简单布局</h4>
+                            <p>按添加顺序排列控件，适用于简单的线性布局</p>
+                        </div>
+                        <div class="stqsb-layout-option" data-layout="flow">
+                            <div class="stqsb-layout-preview">
+                                <div class="stqsb-layout-demo-flow">
+                                    <div class="stqsb-layout-row">
+                                        <span>控件1</span>
+                                        <span>控件2</span>
+                                    </div>
+                                    <div class="stqsb-layout-row">
+                                        <span>控件3</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <h4>流式布局</h4>
+                            <p>根据控件位置自动分组为行，保持视觉布局结构</p>
+                        </div>
+                    </div>
+                    <div class="stqsb-layout-actions">
+                        <button class="stqsb-layout-cancel">取消</button>
+                        <button class="stqsb-layout-confirm" disabled>确认</button>
+                    </div>
+                </div>
+            </div>
+        `;
         
-        // 创建预览窗口
-        this.showPreviewWindow(template);
+        // 添加样式
+        const style = document.createElement('style');
+        style.textContent = `
+            .stqsb-layout-dialog {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                z-index: 10001;
+            }
+            
+            .stqsb-layout-dialog-overlay {
+                background: rgba(0, 0, 0, 0.8);
+                width: 100%;
+                height: 100%;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+            
+            .stqsb-layout-dialog-content {
+                background: #2a2a2a;
+                border-radius: 12px;
+                padding: 24px;
+                max-width: 600px;
+                width: 90%;
+                color: white;
+            }
+            
+            .stqsb-layout-dialog-content h3 {
+                margin: 0 0 24px 0;
+                font-size: 20px;
+                text-align: center;
+            }
+            
+            .stqsb-layout-options {
+                display: flex;
+                gap: 16px;
+                margin-bottom: 24px;
+            }
+            
+            .stqsb-layout-option {
+                flex: 1;
+                background: #3a3a3a;
+                border: 2px solid #444;
+                border-radius: 8px;
+                padding: 16px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                text-align: center;
+            }
+            
+            .stqsb-layout-option:hover {
+                border-color: #667eea;
+            }
+            
+            .stqsb-layout-option.selected {
+                border-color: #667eea;
+                background: #4a4a4a;
+            }
+            
+            .stqsb-layout-preview {
+                margin-bottom: 12px;
+                padding: 12px;
+                background: #1a1a1a;
+                border-radius: 6px;
+                min-height: 60px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            .stqsb-layout-demo-simple {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            
+            .stqsb-layout-demo-simple span {
+                background: #667eea;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 12px;
+            }
+            
+            .stqsb-layout-demo-flow {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+            
+            .stqsb-layout-row {
+                display: flex;
+                gap: 6px;
+                justify-content: center;
+            }
+            
+            .stqsb-layout-row span {
+                background: #667eea;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 12px;
+            }
+            
+            .stqsb-layout-option h4 {
+                margin: 0 0 8px 0;
+                font-size: 16px;
+                color: #fff;
+            }
+            
+            .stqsb-layout-option p {
+                margin: 0;
+                font-size: 14px;
+                color: #ccc;
+                line-height: 1.4;
+            }
+            
+            .stqsb-layout-actions {
+                display: flex;
+                gap: 12px;
+                justify-content: flex-end;
+            }
+            
+            .stqsb-layout-actions button {
+                padding: 10px 20px;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 14px;
+                transition: background-color 0.3s ease;
+            }
+            
+            .stqsb-layout-cancel {
+                background: #666;
+                color: white;
+            }
+            
+            .stqsb-layout-cancel:hover {
+                background: #555;
+            }
+            
+            .stqsb-layout-confirm {
+                background: #667eea;
+                color: white;
+            }
+            
+            .stqsb-layout-confirm:hover:not(:disabled) {
+                background: #5a67d8;
+            }
+            
+            .stqsb-layout-confirm:disabled {
+                background: #444;
+                cursor: not-allowed;
+            }
+        `;
+        
+        document.head.appendChild(style);
+        document.body.appendChild(dialog);
+        
+        let selectedLayout = null;
+        const confirmButton = dialog.querySelector('.stqsb-layout-confirm');
+        
+        // 绑定选项点击事件
+        const options = dialog.querySelectorAll('.stqsb-layout-option');
+        options.forEach(option => {
+            option.addEventListener('click', () => {
+                // 清除之前的选择
+                options.forEach(opt => opt.classList.remove('selected'));
+                
+                // 选择当前选项
+                option.classList.add('selected');
+                selectedLayout = option.dataset.layout;
+                
+                // 启用确认按钮
+                confirmButton.disabled = false;
+            });
+        });
+        
+        // 绑定按钮事件
+        dialog.querySelector('.stqsb-layout-cancel').addEventListener('click', () => {
+            dialog.remove();
+            style.remove();
+        });
+        
+        confirmButton.addEventListener('click', () => {
+            if (selectedLayout) {
+                // 生成对应的模板
+                let template;
+                if (selectedLayout === 'simple') {
+                    template = this.generateTemplate();
+                } else if (selectedLayout === 'flow') {
+                    template = this.generateLayoutAwareHTML();
+                }
+                
+                // 根据 action 参数决定执行什么操作
+                if (action === 'preview') {
+                    this.showPreviewWindow(template);
+                } else if (action === 'code') {
+                    const code = this.formatGeneratedCode(template);
+                    this.showCodeWindow(code);
+                }
+                
+                // 关闭对话框
+                dialog.remove();
+                style.remove();
+            }
+        });
+        
+        // 点击背景关闭
+        dialog.querySelector('.stqsb-layout-dialog-overlay').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                dialog.remove();
+                style.remove();
+            }
+        });
     }
     
     // 生成模板
@@ -3115,10 +3465,13 @@ class DesignerModal {
             defaultValues: {}
         };
         
+        // 根据位置对控件进行分组排序
+        const sortedControls = this.sortControlsByPosition(this.canvasControls);
+        
         // 构建HTML
         let html = '<div class="stqsb-dynamic-container">\n';
         
-        this.canvasControls.forEach(control => {
+        sortedControls.forEach(control => {
             const controlHtml = this.plugin.extendedControls.generateControlHTML(
                 control.category,
                 control.type,
@@ -3144,6 +3497,157 @@ class DesignerModal {
         template.html = html;
         
         return template;
+    }
+    
+    // 根据位置对控件进行排序
+    sortControlsByPosition(controls) {
+        // 创建控件位置副本
+        const controlsWithPosition = controls.map(control => ({
+            ...control,
+            position: control.position || { x: 0, y: 0 }
+        }));
+        
+        // 按行排序的逻辑
+        // 1. 先按Y坐标排序（从上到下）
+        // 2. 在同一行内按X坐标排序（从左到右）
+        
+        const rowTolerance = 30; // 30px的容差，认为是同一行
+        
+        return controlsWithPosition.sort((a, b) => {
+            const yDiff = Math.abs(a.position.y - b.position.y);
+            
+            // 如果Y坐标差距在容差范围内，认为是同一行
+            if (yDiff <= rowTolerance) {
+                // 同一行内按X坐标排序
+                return a.position.x - b.position.x;
+            }
+            
+            // 不同行按Y坐标排序
+            return a.position.y - b.position.y;
+        });
+    }
+    
+    // 生成带布局信息的HTML
+    generateLayoutAwareHTML() {
+        const template = {
+            html: '',
+            fields: {},
+            defaultValues: {},
+            layout: 'flow' // 标识这是流式布局
+        };
+        
+        // 根据位置分组控件到行
+        const rows = this.groupControlsIntoRows(this.canvasControls);
+        
+        // 构建HTML
+        let html = '<div class="stqsb-dynamic-container">\n';
+        
+        rows.forEach((row, rowIndex) => {
+            // 如果一行有多个控件，创建行容器
+            if (row.length > 1) {
+                html += '  <div class="stqsb-row">\n';
+                
+                row.forEach(control => {
+                    const controlHtml = this.plugin.extendedControls.generateControlHTML(
+                        control.category,
+                        control.type,
+                        control.properties
+                    );
+                    html += `    <span class="stqsb-inline-control">${controlHtml}</span>\n`;
+                    
+                    // 提取字段信息
+                    this.extractFieldInfo(control, template);
+                });
+                
+                html += '  </div>\n';
+            } else {
+                // 单个控件直接添加
+                const control = row[0];
+                const controlHtml = this.plugin.extendedControls.generateControlHTML(
+                    control.category,
+                    control.type,
+                    control.properties
+                );
+                html += `  <div class="stqsb-block-control">${controlHtml}</div>\n`;
+                
+                // 提取字段信息
+                this.extractFieldInfo(control, template);
+            }
+        });
+        
+        html += '</div>';
+        template.html = html;
+        
+        return template;
+    }
+    
+    // 将控件分组到行
+    groupControlsIntoRows(controls) {
+        if (!controls || controls.length === 0) return [];
+        
+        const rows = [];
+        const rowTolerance = 30; // 30px的容差
+        
+        // 先按Y坐标排序
+        const sortedControls = controls.slice().sort((a, b) => {
+            const posA = a.position || { x: 0, y: 0 };
+            const posB = b.position || { x: 0, y: 0 };
+            return posA.y - posB.y;
+        });
+        
+        let currentRow = [];
+        let currentRowY = null;
+        
+        sortedControls.forEach(control => {
+            const pos = control.position || { x: 0, y: 0 };
+            
+            // 检查是否属于当前行
+            if (currentRowY === null || Math.abs(pos.y - currentRowY) <= rowTolerance) {
+                // 属于当前行
+                currentRow.push(control);
+                currentRowY = currentRowY === null ? pos.y : Math.min(currentRowY, pos.y);
+            } else {
+                // 开始新行
+                if (currentRow.length > 0) {
+                    // 对当前行按X坐标排序
+                    currentRow.sort((a, b) => {
+                        const posA = a.position || { x: 0, y: 0 };
+                        const posB = b.position || { x: 0, y: 0 };
+                        return posA.x - posB.x;
+                    });
+                    rows.push(currentRow);
+                }
+                currentRow = [control];
+                currentRowY = pos.y;
+            }
+        });
+        
+        // 添加最后一行
+        if (currentRow.length > 0) {
+            currentRow.sort((a, b) => {
+                const posA = a.position || { x: 0, y: 0 };
+                const posB = b.position || { x: 0, y: 0 };
+                return posA.x - posB.x;
+            });
+            rows.push(currentRow);
+        }
+        
+        return rows;
+    }
+    
+    // 提取字段信息
+    extractFieldInfo(control, template) {
+        if (control.properties.field) {
+            template.fields[control.properties.field] = {
+                type: control.type,
+                defaultValue: control.properties.value || control.properties.text || '',
+                min: control.properties.min,
+                max: control.properties.max,
+                updateRule: control.properties.updateRule || 'replace'
+            };
+            
+            template.defaultValues[control.properties.field] = control.properties.value || control.properties.text || '';
+        }
     }
     
     // 显示预览窗口
@@ -3196,6 +3700,32 @@ class DesignerModal {
                 display: flex; align-items: center; justify-content: center; 
                 color: #fff; font-size: 12px; font-weight: bold; 
             }
+            
+            /* 流式布局专用样式 */
+            .stqsb-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin: 8px 0;
+                flex-wrap: wrap;
+            }
+            
+            .stqsb-inline-control {
+                display: inline-block;
+            }
+            
+            .stqsb-block-control {
+                display: block;
+                margin: 12px 0;
+            }
+            
+            .stqsb-block-control:first-child {
+                margin-top: 0;
+            }
+            
+            .stqsb-block-control:last-child {
+                margin-bottom: 0;
+            }
         `;
     }
     
@@ -3206,11 +3736,15 @@ class DesignerModal {
             return;
         }
         
-        const template = this.generateTemplate();
-        const code = this.formatGeneratedCode(template);
-        
-        // 显示代码窗口
-        this.showCodeWindow(code);
+        // 如果有多个控件，显示布局选择对话框
+        if (this.canvasControls.length > 1) {
+            this.showLayoutSelectionDialog('code');
+        } else {
+            // 单个控件直接生成代码
+            const template = this.generateTemplate();
+            const code = this.formatGeneratedCode(template);
+            this.showCodeWindow(code);
+        }
     }
     
     // 格式化生成的代码
