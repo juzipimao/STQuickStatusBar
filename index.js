@@ -14,18 +14,20 @@
     let currentTemplate = null;
     let statusDisplay = null;
 
-    // 导入SillyTavern的全局对象
-    const { 
-        eventSource, 
-        event_types, 
-        chat, 
-        characters, 
-        this_chid, 
-        extension_settings, 
-        saveSettingsDebounced, 
-        getRequestHeaders,
-        getContext 
-    } = window;
+    // 安全地访问SillyTavern的全局对象
+    function getSillyTavernGlobals() {
+        return {
+            eventSource: window.eventSource,
+            event_types: window.event_types,
+            chat: window.chat,
+            characters: window.characters,
+            this_chid: window.this_chid,
+            extension_settings: window.extension_settings,
+            saveSettingsDebounced: window.saveSettingsDebounced,
+            getRequestHeaders: window.getRequestHeaders,
+            getContext: window.getContext
+        };
+    }
 
     // 默认设置
     const defaultSettings = {
@@ -64,6 +66,11 @@
             console.error(`[${PLUGIN_NAME}]`, ...args);
         }
 
+        // 强制日志记录（用于调试）
+        forceLog(...args) {
+            console.log(`[${PLUGIN_NAME}]`, ...args);
+        }
+
         // 初始化插件
         async init() {
             try {
@@ -95,16 +102,29 @@
 
         // 加载设置
         loadSettings() {
-            const savedSettings = extension_settings[PLUGIN_NAME] || {};
-            this.settings = { ...defaultSettings, ...savedSettings };
-            this.log('设置已加载:', this.settings);
+            const globals = getSillyTavernGlobals();
+            if (globals.extension_settings) {
+                const savedSettings = globals.extension_settings[PLUGIN_NAME] || {};
+                this.settings = { ...defaultSettings, ...savedSettings };
+                this.log('设置已加载:', this.settings);
+            } else {
+                this.settings = { ...defaultSettings };
+                this.log('extension_settings未定义，使用默认设置');
+            }
         }
 
         // 保存设置
         saveSettings() {
-            extension_settings[PLUGIN_NAME] = this.settings;
-            saveSettingsDebounced();
-            this.log('设置已保存');
+            const globals = getSillyTavernGlobals();
+            if (globals.extension_settings) {
+                globals.extension_settings[PLUGIN_NAME] = this.settings;
+                if (globals.saveSettingsDebounced) {
+                    globals.saveSettingsDebounced();
+                }
+                this.log('设置已保存');
+            } else {
+                this.log('extension_settings未定义，无法保存设置');
+            }
         }
 
         // 初始化核心组件
@@ -131,15 +151,43 @@
 
         // 创建快速状态栏按钮
         createQuickBarButton() {
-            if (!this.settings.showInQuickBar) return;
+            this.forceLog('开始创建快速状态栏按钮');
             
-            const quickBarContainer = document.getElementById('quick-status-bar') || 
-                                    document.querySelector('#top-bar') || 
-                                    document.querySelector('#user-controls');
+            if (!this.settings.showInQuickBar) {
+                this.forceLog('showInQuickBar 设置为 false，跳过按钮创建');
+                return;
+            }
+            
+            // 尝试多个可能的容器位置
+            const containers = [
+                '#quick-status-bar',
+                '#top-bar', 
+                '#user-controls',
+                '#rightSendForm',
+                '#send_form',
+                '#chat-input-area',
+                'body' // 最后的备选方案
+            ];
+            
+            let quickBarContainer = null;
+            for (const selector of containers) {
+                quickBarContainer = document.querySelector(selector);
+                if (quickBarContainer) {
+                    this.forceLog(`找到容器: ${selector}`);
+                    break;
+                }
+            }
             
             if (!quickBarContainer) {
-                this.error('找不到快速状态栏容器');
-                return;
+                this.error('找不到任何合适的容器，使用 body');
+                quickBarContainer = document.body;
+            }
+
+            // 检查是否已经存在按钮
+            const existingButton = document.getElementById('stqsb-trigger-button');
+            if (existingButton) {
+                this.forceLog('按钮已存在，先移除旧按钮');
+                existingButton.remove();
             }
 
             // 创建按钮
@@ -148,39 +196,72 @@
             button.className = 'stqsb-quick-button';
             button.innerHTML = '<i class="fas fa-paint-brush"></i>';
             button.title = 'STQuickStatusBar 可视化设计器';
+            button.style.cssText = `
+                position: fixed;
+                top: 10px;
+                right: 10px;
+                z-index: 9999;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border: none;
+                border-radius: 8px;
+                color: white;
+                padding: 8px 12px;
+                cursor: pointer;
+                font-size: 14px;
+                transition: all 0.3s ease;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            `;
             
             // 添加点击事件
-            button.addEventListener('click', () => {
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.forceLog('按钮被点击');
                 this.openDesigner();
             });
             
+            // 添加悬停效果
+            button.addEventListener('mouseenter', () => {
+                button.style.transform = 'translateY(-2px)';
+                button.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+            });
+            
+            button.addEventListener('mouseleave', () => {
+                button.style.transform = 'translateY(0)';
+                button.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+            });
+            
             quickBarContainer.appendChild(button);
-            this.log('快速状态栏按钮已创建');
+            this.forceLog('快速状态栏按钮已创建并添加到页面');
         }
 
         // 注册事件监听器
         registerEventListeners() {
             this.log('注册事件监听器');
             
+            const globals = getSillyTavernGlobals();
+            
             // 监听AI消息接收
-            eventSource.on(event_types.MESSAGE_RECEIVED, (messageId) => {
-                this.handleAIMessage(messageId);
-            });
-            
-            // 监听聊天切换
-            eventSource.on(event_types.CHAT_CHANGED, () => {
-                this.handleChatChanged();
-            });
-            
-            // 监听角色切换
-            eventSource.on('character_selected', () => {
-                this.handleCharacterChanged();
-            });
-            
-            // 监听应用就绪
-            eventSource.on(event_types.APP_READY, () => {
-                this.handleAppReady();
-            });
+            if (globals.eventSource && globals.event_types) {
+                globals.eventSource.on(globals.event_types.MESSAGE_RECEIVED, (messageId) => {
+                    this.handleAIMessage(messageId);
+                });
+                
+                // 监听聊天切换
+                globals.eventSource.on(globals.event_types.CHAT_CHANGED, () => {
+                    this.handleChatChanged();
+                });
+                
+                // 监听角色切换
+                globals.eventSource.on('character_selected', () => {
+                    this.handleCharacterChanged();
+                });
+                
+                // 监听应用就绪
+                globals.eventSource.on(globals.event_types.APP_READY, () => {
+                    this.handleAppReady();
+                });
+            }
             
             this.log('事件监听器注册完成');
         }
@@ -194,7 +275,10 @@
         // 处理AI消息
         handleAIMessage(messageId) {
             try {
-                const message = chat[messageId];
+                const globals = getSillyTavernGlobals();
+                if (!globals.chat) return;
+                
+                const message = globals.chat[messageId];
                 if (!message || message.is_user) return;
                 
                 this.log('处理AI消息:', messageId);
@@ -249,9 +333,10 @@
         // 加载角色模板
         loadCharacterTemplate() {
             try {
-                if (!this_chid || !characters[this_chid]) return;
+                const globals = getSillyTavernGlobals();
+                if (!globals.this_chid || !globals.characters || !globals.characters[globals.this_chid]) return;
                 
-                const character = characters[this_chid];
+                const character = globals.characters[globals.this_chid];
                 const extensionData = character.data?.extensions?.[PLUGIN_NAME];
                 
                 if (extensionData && extensionData.template) {
@@ -274,14 +359,28 @@
 
         // 打开设计器
         openDesigner() {
-            this.log('打开设计器');
+            this.forceLog('尝试打开设计器');
             
             if (!this.designerModal) {
                 this.error('设计器模态框未初始化');
-                return;
+                // 尝试重新初始化
+                this.forceLog('尝试重新初始化设计器模态框');
+                try {
+                    this.designerModal = new DesignerModal(this);
+                    this.forceLog('设计器模态框重新初始化成功');
+                } catch (error) {
+                    this.error('设计器模态框重新初始化失败:', error);
+                    return;
+                }
             }
             
-            this.designerModal.show();
+            this.forceLog('调用设计器模态框的 show 方法');
+            try {
+                this.designerModal.show();
+                this.forceLog('设计器模态框显示成功');
+            } catch (error) {
+                this.error('显示设计器模态框失败:', error);
+            }
         }
 
         // 关闭设计器
@@ -311,9 +410,10 @@
         // 保存模板到角色
         saveTemplateToCharacter(template) {
             try {
-                if (!this_chid || !characters[this_chid]) return;
+                const globals = getSillyTavernGlobals();
+                if (!globals.this_chid || !globals.characters || !globals.characters[globals.this_chid]) return;
                 
-                const character = characters[this_chid];
+                const character = globals.characters[globals.this_chid];
                 
                 // 初始化数据结构
                 if (!character.data) character.data = {};
@@ -340,9 +440,15 @@
         // 同步角色数据到服务器
         async syncCharacterData(character) {
             try {
+                const globals = getSillyTavernGlobals();
+                if (!globals.getRequestHeaders) {
+                    this.log('getRequestHeaders不可用，跳过同步');
+                    return;
+                }
+                
                 const response = await fetch('/api/characters/merge-attributes', {
                     method: 'POST',
-                    headers: getRequestHeaders(),
+                    headers: globals.getRequestHeaders(),
                     body: JSON.stringify({
                         avatar: character.avatar,
                         data: {
@@ -399,10 +505,13 @@
             this.log('销毁插件');
             
             // 清除事件监听器
-            eventSource.off(event_types.MESSAGE_RECEIVED);
-            eventSource.off(event_types.CHAT_CHANGED);
-            eventSource.off('character_selected');
-            eventSource.off(event_types.APP_READY);
+            const globals = getSillyTavernGlobals();
+            if (globals.eventSource && globals.event_types) {
+                globals.eventSource.off(globals.event_types.MESSAGE_RECEIVED);
+                globals.eventSource.off(globals.event_types.CHAT_CHANGED);
+                globals.eventSource.off('character_selected');
+                globals.eventSource.off(globals.event_types.APP_READY);
+            }
             
             // 销毁组件
             if (this.statusDisplay) {
@@ -2026,11 +2135,12 @@ class WorldInfoIntegrator {
     // 插入世界书条目到当前角色
     async insertWorldInfoEntry(worldInfoEntry) {
         try {
-            if (!this_chid || !characters[this_chid]) {
+            const globals = getSillyTavernGlobals();
+            if (!globals.this_chid || !globals.characters || !globals.characters[globals.this_chid]) {
                 throw new Error('没有选中的角色');
             }
             
-            const character = characters[this_chid];
+            const character = globals.characters[globals.this_chid];
             
             // 确保角色有世界书数据结构
             if (!character.data) character.data = {};
@@ -2053,9 +2163,14 @@ class WorldInfoIntegrator {
             character.data.character_book.extensions.st_quick_status_bar.entries.push(worldInfoEntry.uid);
             
             // 发送到服务器保存
+            if (!globals.getRequestHeaders) {
+                this.log('getRequestHeaders不可用，跳过同步');
+                return worldInfoEntry.uid;
+            }
+            
             const response = await fetch('/api/characters/merge-attributes', {
                 method: 'POST',
-                headers: getRequestHeaders(),
+                headers: globals.getRequestHeaders(),
                 body: JSON.stringify({
                     avatar: character.avatar,
                     data: {
@@ -2080,11 +2195,12 @@ class WorldInfoIntegrator {
     // 更新现有世界书条目
     async updateWorldInfoEntry(entryUid, newTemplate, newFields) {
         try {
-            if (!this_chid || !characters[this_chid]) {
+            const globals = getSillyTavernGlobals();
+            if (!globals.this_chid || !globals.characters || !globals.characters[globals.this_chid]) {
                 throw new Error('没有选中的角色');
             }
             
-            const character = characters[this_chid];
+            const character = globals.characters[globals.this_chid];
             const entry = character.data?.character_book?.entries?.[entryUid];
             
             if (!entry) {
@@ -2107,9 +2223,14 @@ class WorldInfoIntegrator {
             entry.extensions.st_quick_status_bar.timestamp = Date.now();
             
             // 发送到服务器保存
+            if (!globals.getRequestHeaders) {
+                this.log('getRequestHeaders不可用，跳过同步');
+                return entryUid;
+            }
+            
             const response = await fetch('/api/characters/merge-attributes', {
                 method: 'POST',
-                headers: getRequestHeaders(),
+                headers: globals.getRequestHeaders(),
                 body: JSON.stringify({
                     avatar: character.avatar,
                     data: {
@@ -2134,11 +2255,12 @@ class WorldInfoIntegrator {
     // 删除世界书条目
     async deleteWorldInfoEntry(entryUid) {
         try {
-            if (!this_chid || !characters[this_chid]) {
+            const globals = getSillyTavernGlobals();
+            if (!globals.this_chid || !globals.characters || !globals.characters[globals.this_chid]) {
                 throw new Error('没有选中的角色');
             }
             
-            const character = characters[this_chid];
+            const character = globals.characters[globals.this_chid];
             
             // 删除条目
             if (character.data?.character_book?.entries?.[entryUid]) {
@@ -2152,9 +2274,14 @@ class WorldInfoIntegrator {
             }
             
             // 发送到服务器保存
+            if (!globals.getRequestHeaders) {
+                this.log('getRequestHeaders不可用，跳过同步');
+                return true;
+            }
+            
             const response = await fetch('/api/characters/merge-attributes', {
                 method: 'POST',
-                headers: getRequestHeaders(),
+                headers: globals.getRequestHeaders(),
                 body: JSON.stringify({
                     avatar: character.avatar,
                     data: {
@@ -2178,11 +2305,12 @@ class WorldInfoIntegrator {
     
     // 获取当前角色的STQuickStatusBar世界书条目
     getCurrentCharacterEntries() {
-        if (!this_chid || !characters[this_chid]) {
+        const globals = getSillyTavernGlobals();
+        if (!globals.this_chid || !globals.characters || !globals.characters[globals.this_chid]) {
             return [];
         }
         
-        const character = characters[this_chid];
+        const character = globals.characters[globals.this_chid];
         const entries = character.data?.character_book?.entries || {};
         const stqsbEntries = character.data?.character_book?.extensions?.st_quick_status_bar?.entries || [];
         
@@ -2228,6 +2356,13 @@ class DesignerModal {
         this.currentTemplate = null;
         this.selectedControl = null;
         this.canvasControls = [];
+        
+        // 拖动相关变量
+        this.isDraggingControl = false;
+        this.draggedControl = null;
+        this.draggedElement = null;
+        this.dragPlaceholder = null;
+        
         this.log('设计器模态框初始化完成');
     }
     
@@ -2584,9 +2719,13 @@ class DesignerModal {
         const controlElement = document.createElement('div');
         controlElement.className = 'stqsb-canvas-control';
         controlElement.dataset.controlId = controlInstance.id;
+        controlElement.draggable = true; // 启用拖动
         controlElement.innerHTML = `
             <div class="stqsb-control-wrapper">
                 <div class="stqsb-control-actions">
+                    <button class="stqsb-control-move" title="移动">
+                        <i class="fas fa-arrows-alt"></i>
+                    </button>
                     <button class="stqsb-control-edit" title="编辑">
                         <i class="fas fa-edit"></i>
                     </button>
@@ -2609,6 +2748,15 @@ class DesignerModal {
     
     // 绑定控件事件
     bindControlEvents(element, controlInstance) {
+        // 移动按钮
+        const moveButton = element.querySelector('.stqsb-control-move');
+        if (moveButton) {
+            moveButton.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                this.startControlDrag(element, controlInstance, e);
+            });
+        }
+        
         // 编辑按钮
         const editButton = element.querySelector('.stqsb-control-edit');
         if (editButton) {
@@ -2629,6 +2777,54 @@ class DesignerModal {
         element.addEventListener('click', (e) => {
             if (e.target.closest('.stqsb-control-actions')) return;
             this.selectControl(controlInstance);
+        });
+        
+        // 拖动开始
+        element.addEventListener('dragstart', (e) => {
+            this.isDraggingControl = true;
+            this.draggedControl = controlInstance;
+            element.classList.add('dragging');
+            
+            // 设置拖动数据
+            e.dataTransfer.setData('text/plain', controlInstance.id);
+            e.dataTransfer.effectAllowed = 'move';
+            
+            this.log('开始拖动控件:', controlInstance.id);
+        });
+        
+        // 拖动结束
+        element.addEventListener('dragend', (e) => {
+            this.isDraggingControl = false;
+            this.draggedControl = null;
+            element.classList.remove('dragging');
+            
+            this.log('拖动结束:', controlInstance.id);
+        });
+        
+        // 拖动经过
+        element.addEventListener('dragover', (e) => {
+            if (this.isDraggingControl && this.draggedControl && 
+                this.draggedControl.id !== controlInstance.id) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                element.classList.add('drag-target');
+            }
+        });
+        
+        // 拖动离开
+        element.addEventListener('dragleave', (e) => {
+            element.classList.remove('drag-target');
+        });
+        
+        // 拖动释放
+        element.addEventListener('drop', (e) => {
+            e.preventDefault();
+            element.classList.remove('drag-target');
+            
+            if (this.isDraggingControl && this.draggedControl && 
+                this.draggedControl.id !== controlInstance.id) {
+                this.reorderControls(this.draggedControl, controlInstance);
+            }
         });
     }
     
@@ -2667,6 +2863,98 @@ class DesignerModal {
         }
         
         this.log('控件已删除:', controlInstance);
+    }
+    
+    // 开始控件拖动
+    startControlDrag(element, controlInstance, event) {
+        this.isDraggingControl = true;
+        this.draggedControl = controlInstance;
+        this.draggedElement = element;
+        
+        element.classList.add('dragging');
+        
+        // 创建拖动占位符
+        this.createDragPlaceholder(element);
+        
+        this.log('开始拖动控件:', controlInstance.id);
+    }
+    
+    // 创建拖动占位符
+    createDragPlaceholder(element) {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'stqsb-drag-placeholder';
+        placeholder.innerHTML = '<div class="placeholder-text">拖动到这里</div>';
+        placeholder.style.cssText = `
+            height: ${element.offsetHeight}px;
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            background: rgba(102, 126, 234, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #667eea;
+            font-size: 14px;
+            margin: 5px 0;
+            transition: all 0.3s ease;
+        `;
+        
+        // 插入占位符
+        element.parentNode.insertBefore(placeholder, element);
+        element.style.display = 'none';
+        
+        this.dragPlaceholder = placeholder;
+    }
+    
+    // 重排序控件
+    reorderControls(draggedControl, targetControl) {
+        this.log('重排序控件:', draggedControl.id, '->', targetControl.id);
+        
+        // 获取当前索引
+        const draggedIndex = this.canvasControls.findIndex(c => c.id === draggedControl.id);
+        const targetIndex = this.canvasControls.findIndex(c => c.id === targetControl.id);
+        
+        if (draggedIndex === -1 || targetIndex === -1) return;
+        
+        // 从数组中移除被拖动的控件
+        const [movedControl] = this.canvasControls.splice(draggedIndex, 1);
+        
+        // 插入到目标位置
+        this.canvasControls.splice(targetIndex, 0, movedControl);
+        
+        // 重新渲染画布
+        this.rerenderCanvas();
+        
+        this.log('控件重排序完成');
+    }
+    
+    // 重新渲染画布
+    rerenderCanvas() {
+        const dropZone = this.modal.querySelector('#stqsb-drop-zone');
+        if (!dropZone) return;
+        
+        // 清空画布
+        dropZone.innerHTML = '';
+        
+        // 如果没有控件，显示提示
+        if (this.canvasControls.length === 0) {
+            dropZone.classList.remove('has-content');
+            dropZone.innerHTML = `
+                <i class="fas fa-mouse-pointer"></i>
+                <p>拖拽控件到这里开始设计</p>
+            `;
+            return;
+        }
+        
+        // 重新添加所有控件
+        dropZone.classList.add('has-content');
+        this.canvasControls.forEach(controlInstance => {
+            this.renderCanvasControl(controlInstance);
+        });
+        
+        // 如果有选中的控件，重新高亮
+        if (this.selectedControl) {
+            this.highlightSelectedControl(this.selectedControl);
+        }
     }
     
     // 显示属性面板
@@ -3534,7 +3822,13 @@ class RealTimeStatusDisplay {
             if (!this.renderEngine) return;
             
             // 从SillyTavern获取角色数据
-            const context = getContext();
+            const globals = getSillyTavernGlobals();
+            if (!globals.getContext) {
+                this.log('getContext不可用，跳过状态加载');
+                return;
+            }
+            
+            const context = globals.getContext();
             if (!context || !context.characterId) return;
             
             const character = context.characters[context.characterId];
@@ -3617,7 +3911,13 @@ class RealTimeStatusDisplay {
     // 自动保存状态
     autoSaveState() {
         try {
-            const context = getContext();
+            const globals = getSillyTavernGlobals();
+            if (!globals.getContext) {
+                this.log('getContext不可用，跳过自动保存');
+                return;
+            }
+            
+            const context = globals.getContext();
             if (!context || !context.characterId) return;
             
             const character = context.characters[context.characterId];
@@ -3650,9 +3950,15 @@ class RealTimeStatusDisplay {
     // 同步到服务器
     async syncToServer(character) {
         try {
+            const globals = getSillyTavernGlobals();
+            if (!globals.getRequestHeaders) {
+                this.log('getRequestHeaders不可用，跳过同步');
+                return;
+            }
+            
             const response = await fetch('/api/characters/merge-attributes', {
                 method: 'POST',
-                headers: getRequestHeaders(),
+                headers: globals.getRequestHeaders(),
                 body: JSON.stringify({
                     avatar: character.avatar,
                     data: {

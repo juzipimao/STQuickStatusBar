@@ -424,6 +424,207 @@
 }
 
 /* =================================
+   画布控件拖动样式
+   ================================= */
+
+.stqsb-canvas-control {
+    position: relative;
+    margin: 8px 0;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    cursor: move;
+}
+
+.stqsb-canvas-control:hover {
+    border-color: #667eea;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.stqsb-canvas-control.selected {
+    border-color: #667eea;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+}
+
+.stqsb-canvas-control.dragging {
+    opacity: 0.5;
+    transform: rotate(2deg);
+    z-index: 1000;
+}
+
+.stqsb-canvas-control.drag-target {
+    border-color: #28a745;
+    box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.3);
+    background: rgba(40, 167, 69, 0.1);
+}
+
+.stqsb-control-wrapper {
+    position: relative;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    padding: 12px;
+    transition: all 0.3s ease;
+}
+
+.stqsb-control-actions {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.stqsb-canvas-control:hover .stqsb-control-actions {
+    opacity: 1;
+}
+
+.stqsb-control-actions button {
+    background: #667eea;
+    border: none;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.stqsb-control-actions button:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.stqsb-control-move {
+    background: #28a745 !important;
+    cursor: grab;
+}
+
+.stqsb-control-move:active {
+    cursor: grabbing;
+}
+
+.stqsb-control-edit {
+    background: #ffc107 !important;
+}
+
+.stqsb-control-delete {
+    background: #dc3545 !important;
+}
+
+.stqsb-control-preview {
+    min-height: 24px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stqsb-drag-placeholder {
+    margin: 8px 0;
+    border: 2px dashed #667eea;
+    border-radius: 8px;
+    background: rgba(102, 126, 234, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #667eea;
+    font-size: 14px;
+    font-weight: 500;
+    min-height: 60px;
+    transition: all 0.3s ease;
+}
+
+.stqsb-drag-placeholder:hover {
+    background: rgba(102, 126, 234, 0.2);
+    border-color: #764ba2;
+}
+
+.placeholder-text {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.placeholder-text::before {
+    content: '⇅';
+    font-size: 18px;
+    opacity: 0.7;
+}
+
+/* 拖动状态下的画布样式 */
+.stqsb-canvas.dragging-active {
+    background: rgba(102, 126, 234, 0.05);
+    border: 2px dashed #667eea;
+}
+
+.stqsb-canvas.dragging-active .stqsb-drop-zone {
+    background: rgba(102, 126, 234, 0.1);
+}
+
+/* 拖动动画效果 */
+@keyframes dragPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.stqsb-canvas-control.dragging {
+    animation: dragPulse 0.8s ease-in-out infinite;
+}
+
+/* 控件排序指示器 */
+.stqsb-sort-indicator {
+    position: absolute;
+    left: -20px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #667eea;
+    color: white;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.stqsb-canvas-control:hover .stqsb-sort-indicator {
+    opacity: 1;
+}
+
+/* 拖动时的光标样式 */
+.stqsb-canvas-control.dragging * {
+    cursor: grabbing !important;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .stqsb-control-actions {
+        position: static;
+        opacity: 1;
+        margin-bottom: 8px;
+        justify-content: flex-end;
+    }
+    
+    .stqsb-control-actions button {
+        width: 28px;
+        height: 28px;
+        font-size: 12px;
+    }
+}
+
+/* =================================
    动态容器样式
    ================================= */
 
