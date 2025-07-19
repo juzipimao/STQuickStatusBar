@@ -2238,6 +2238,12 @@ class WorldInfoIntegrator {
 
     // 生成完整的提示词
     generatePrompt(template, userFields, promptType = 'roleplay') {
+        // 调试信息
+        this.log('generatePrompt 调用参数:');
+        this.log('- template:', template);
+        this.log('- userFields:', userFields);
+        this.log('- promptType:', promptType);
+
         const promptTemplate = this.promptTemplates[promptType];
         if (!promptTemplate) {
             this.log(`未找到提示词模板: ${promptType}`);
@@ -2245,6 +2251,7 @@ class WorldInfoIntegrator {
         }
 
         const fieldDescriptions = this.generateFieldDescriptions(userFields);
+        this.log('生成的字段描述:', fieldDescriptions);
 
         let prompt = promptTemplate.template
             .replace('{{fieldDescriptions}}', fieldDescriptions)
@@ -2261,6 +2268,12 @@ class WorldInfoIntegrator {
     // 创建世界书条目
     async createWorldInfoEntry(template, fields, options = {}) {
         try {
+            // 调试信息
+            this.log('createWorldInfoEntry 调用参数:');
+            this.log('- template:', template);
+            this.log('- fields:', fields);
+            this.log('- options:', options);
+
             const {
                 promptType = 'roleplay',
                 keys = ['status', 'stats', 'character_sheet'],
@@ -2364,10 +2377,25 @@ class WorldInfoIntegrator {
                 }
 
                 this.log('世界书条目插入成功:', worldInfoEntry.uid);
+
+                // 插入成功后，触发界面刷新
+                setTimeout(async () => {
+                    this.log('🔄 执行角色世界书刷新');
+                    await this.refreshCharacterWorldBook();
+                    this.log('✅ 角色世界书刷新完成');
+                }, 500);
+
                 return worldInfoEntry.uid;
 
             } catch (syncError) {
                 this.log('同步到服务器失败，但本地已保存:', syncError);
+
+                // 即使同步失败，也尝试刷新界面
+                setTimeout(async () => {
+                    this.log('🔄 同步失败但仍尝试刷新界面');
+                    await this.refreshCharacterWorldBook();
+                }, 500);
+
                 return worldInfoEntry.uid;
             }
 
@@ -2798,6 +2826,13 @@ class WorldInfoIntegrator {
             // 触发世界书列表更新（如果是新创建的世界书）
             await this.updateWorldInfoList();
 
+            // 额外的界面刷新，确保用户能立即看到新条目
+            setTimeout(async () => {
+                this.log('🔄 执行延迟刷新以确保世界书条目可见');
+                await this.triggerWorldInfoUpdateEvents(worldBookName);
+                this.log('✅ 世界书条目刷新完成');
+            }, 1000);
+
             return entry.uid;
         } catch (error) {
             this.log('插入到世界书失败:', error);
@@ -2819,6 +2854,184 @@ class WorldInfoIntegrator {
     previewPrompt(template, fields, promptType = 'roleplay') {
         const promptData = this.generatePrompt(template, fields, promptType);
         return promptData ? promptData.content : null;
+    }
+
+    // 强制重新加载世界书数据并刷新显示
+    async forceReloadWorldBook(worldName) {
+        try {
+            this.log(`🔄 强制重新加载世界书: ${worldName}`);
+
+            // 优先通过API从服务器获取最新数据
+            try {
+                const headers = await this.getRequestHeaders();
+                const response = await fetch('/api/worldinfo/get', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({ name: worldName })
+                });
+
+                if (response.ok) {
+                    const freshWorldData = await response.json();
+                    this.log(`✅ 通过API获取到最新世界书数据: ${worldName}`);
+
+                    // 调用SillyTavern的显示函数
+                    if (window.displayWorldEntries && typeof window.displayWorldEntries === 'function') {
+                        await window.displayWorldEntries(worldName, freshWorldData);
+                        this.log(`✅ 世界书条目显示已刷新: ${worldName}`);
+                        return true;
+                    }
+                }
+            } catch (apiError) {
+                this.log(`⚠️ API获取失败，尝试备用方案: ${apiError.message}`);
+            }
+
+            // 备用方案1: 使用SillyTavern的loadWorldInfo函数
+            if (window.loadWorldInfo && typeof window.loadWorldInfo === 'function') {
+                this.log(`🔄 使用loadWorldInfo备用方案: ${worldName}`);
+                const worldData = await window.loadWorldInfo(worldName);
+
+                if (worldData && window.displayWorldEntries) {
+                    await window.displayWorldEntries(worldName, worldData);
+                    this.log(`✅ 通过备用方案刷新成功: ${worldName}`);
+                    return true;
+                }
+            }
+
+            // 备用方案2: 触发重新加载事件
+            const globals = this.getSillyTavernGlobals();
+            if (globals.eventSource && globals.event_types) {
+                globals.eventSource.emit(globals.event_types.WORLDINFO_FORCE_ACTIVATE, []);
+                this.log(`🔄 通过事件触发重新加载: ${worldName}`);
+                return true;
+            }
+
+            this.log(`❌ 所有刷新方案都失败了: ${worldName}`);
+            return false;
+
+        } catch (error) {
+            this.log(`❌ 强制重新加载世界书失败: ${worldName}`, error);
+            return false;
+        }
+    }
+
+    // 触发世界书更新事件和界面刷新
+    async triggerWorldInfoUpdateEvents(worldName) {
+        try {
+            this.log(`🔄 触发世界书更新事件: ${worldName}`);
+
+            // 立即尝试刷新一次
+            const immediateSuccess = await this.forceReloadWorldBook(worldName);
+            if (immediateSuccess) {
+                this.log(`✅ 立即刷新成功: ${worldName}`);
+            }
+
+            // 如果立即刷新失败，延迟重试
+            if (!immediateSuccess) {
+                this.log(`⚠️ 立即刷新失败，将在1秒后重试: ${worldName}`);
+                setTimeout(async () => {
+                    const retrySuccess = await this.forceReloadWorldBook(worldName);
+                    if (retrySuccess) {
+                        this.log(`✅ 延迟重试刷新成功: ${worldName}`);
+                    } else {
+                        this.log(`❌ 延迟重试也失败了: ${worldName}`);
+                    }
+                }, 1000);
+            }
+
+            // 触发SillyTavern的世界书相关事件
+            const globals = this.getSillyTavernGlobals();
+            if (globals.eventSource && globals.event_types) {
+                // 触发世界书设置更新事件
+                try {
+                    globals.eventSource.emit(globals.event_types.WORLDINFO_SETTINGS_UPDATED);
+                    this.log(`✅ 触发WORLDINFO_SETTINGS_UPDATED事件`);
+                } catch (e) {
+                    this.log(`⚠️ 触发WORLDINFO_SETTINGS_UPDATED事件失败:`, e);
+                }
+
+                // 触发世界书激活事件
+                try {
+                    globals.eventSource.emit(globals.event_types.WORLD_INFO_ACTIVATED, []);
+                    this.log(`✅ 触发WORLD_INFO_ACTIVATED事件`);
+                } catch (e) {
+                    this.log(`⚠️ 触发WORLD_INFO_ACTIVATED事件失败:`, e);
+                }
+            }
+
+            return immediateSuccess;
+
+        } catch (error) {
+            this.log(`❌ 触发世界书更新事件失败: ${worldName}`, error);
+            return false;
+        }
+    }
+
+    // 刷新角色世界书显示
+    async refreshCharacterWorldBook() {
+        try {
+            const globals = this.getSillyTavernGlobals();
+            if (!globals.this_chid || !globals.characters || !globals.characters[globals.this_chid]) {
+                this.log('⚠️ 没有选中的角色，无法刷新角色世界书');
+                return false;
+            }
+
+            const character = globals.characters[globals.this_chid];
+            this.log(`🔄 刷新角色世界书: ${character.name || character.avatar}`);
+
+            // 检查角色是否有世界书条目
+            const entries = character.data?.character_book?.entries || {};
+            const entryCount = Object.keys(entries).length;
+            this.log(`📊 角色世界书条目数量: ${entryCount}`);
+
+            // 方法1: 尝试通过角色名称匹配世界书
+            const possibleWorldNames = [
+                character.name,
+                character.avatar,
+                `${character.name}_world`,
+                `${character.avatar}_world`,
+                'character_world',
+                '角色世界书'
+            ].filter(name => name); // 过滤掉空值
+
+            let refreshSuccess = false;
+
+            for (const worldName of possibleWorldNames) {
+                this.log(`🔍 尝试刷新世界书: ${worldName}`);
+                const success = await this.triggerWorldInfoUpdateEvents(worldName);
+                if (success) {
+                    refreshSuccess = true;
+                    this.log(`✅ 成功刷新世界书: ${worldName}`);
+                    break;
+                }
+            }
+
+            // 方法2: 如果没有找到匹配的世界书，尝试刷新当前选中的世界书
+            if (!refreshSuccess) {
+                const worldEditorSelect = document.getElementById('world_editor_select');
+                if (worldEditorSelect && worldEditorSelect.selectedOptions.length > 0) {
+                    const selectedWorldName = worldEditorSelect.selectedOptions[0].textContent;
+                    if (selectedWorldName) {
+                        this.log(`🔄 刷新当前选中的世界书: ${selectedWorldName}`);
+                        refreshSuccess = await this.triggerWorldInfoUpdateEvents(selectedWorldName);
+                    }
+                }
+            }
+
+            // 方法3: 强制刷新世界书编辑器界面
+            this.refreshWorldBookEditor();
+
+            if (refreshSuccess) {
+                this.log(`✅ 角色世界书刷新完成: ${character.name || character.avatar}`);
+            } else {
+                this.log(`⚠️ 角色世界书刷新可能未完全成功，但已尝试所有方法`);
+            }
+
+            return refreshSuccess;
+
+        } catch (error) {
+            this.log(`❌ 刷新角色世界书失败:`, error);
+            return false;
+        }
     }
 
     // 日志记录
@@ -3945,13 +4158,25 @@ class DesignerModal {
             defaultValues: {}
         };
 
+        // 调试信息：显示画布控件
+        this.log('画布控件数量:', this.canvasControls.length);
+        this.canvasControls.forEach((control, index) => {
+            this.log(`控件 ${index}:`, {
+                category: control.category,
+                type: control.type,
+                properties: control.properties,
+                hasField: !!control.properties.field,
+                fieldValue: control.properties.field
+            });
+        });
+
         // 根据位置对控件进行分组排序
         const sortedControls = this.sortControlsByPosition(this.canvasControls);
 
         // 构建HTML
         let html = '<div class="stqsb-dynamic-container">\n';
 
-        sortedControls.forEach(control => {
+        sortedControls.forEach((control, index) => {
             const controlHtml = this.plugin.extendedControls.generateControlHTML(
                 control.category,
                 control.type,
@@ -3970,12 +4195,17 @@ class DesignerModal {
                 };
 
                 template.defaultValues[control.properties.field] = control.properties.value || control.properties.text || '';
+
+                this.log(`提取字段 ${index}:`, control.properties.field, template.fields[control.properties.field]);
+            } else {
+                this.log(`控件 ${index} 没有字段属性:`, control.properties);
             }
         });
 
         html += '</div>';
         template.html = html;
 
+        this.log('最终模板:', template);
         return template;
     }
 
@@ -4631,6 +4861,17 @@ statusDisplay.createStatusDisplay(template);
             // 生成模板
             const template = this.generateTemplate();
 
+            // 调试信息：显示生成的模板
+            this.log('生成的模板:', template);
+            this.log('模板字段:', template.fields);
+            this.log('默认值:', template.defaultValues);
+            this.log('HTML内容:', template.html);
+
+            // 检查是否有字段
+            if (!template.fields || Object.keys(template.fields).length === 0) {
+                throw new Error('没有找到任何状态字段。请确保在预览区域添加了带有字段名的组件（如数值显示、进度条等）。');
+            }
+
             // 创建世界书条目
             const entry = await this.plugin.worldInfoIntegrator.createWorldInfoEntry(template, template.fields);
 
@@ -4649,6 +4890,21 @@ statusDisplay.createStatusDisplay(template);
 
             // 触发世界书列表更新
             await this.plugin.worldInfoIntegrator.updateWorldInfoList();
+
+            // 额外的界面刷新，确保用户能立即看到新条目
+            setTimeout(async () => {
+                this.log('🔄 执行延迟刷新以确保界面更新');
+
+                // 刷新角色世界书
+                await this.plugin.worldInfoIntegrator.refreshCharacterWorldBook();
+
+                // 如果插入的是指定世界书文件，也尝试刷新它
+                if (worldBookName !== 'character_world' && !worldBookName.includes('角色')) {
+                    await this.plugin.worldInfoIntegrator.triggerWorldInfoUpdateEvents(worldBookName);
+                }
+
+                this.log('✅ 延迟刷新完成，世界书条目应该已经可见');
+            }, 1000);
 
         } catch (error) {
             this.log('执行世界书插入失败:', error);
