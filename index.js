@@ -669,6 +669,16 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 4. 每个部分只包含纯粹的内容，不要包含任何描述性文字
 5. 回复结束后不要添加任何说明文字或解释
 
+关键规则 - HTML美化内容：
+- HTML美化内容必须是纯净的HTML代码，不能包含任何解释文字或额外内容
+- HTML美化内容必须以<!DOCTYPE html>开头，包含完整的html、head、body结构
+- HTML美化内容必须使用示例正文内容中的真实数据，不要使用任何占位符
+- 例如：如果示例正文内容中是<姓名>艾拉</姓名>，HTML中就应该写"艾拉"，不要写"{{角色.姓名}}"
+- 如果示例正文内容中是<好感度>友好 (50/100)</好感度>，HTML中就应该写"友好 (50/100)"，不要写"{{角色.好感度}}"
+- HTML美化内容是最终展示给用户的内容，必须直接显示真实的数值和文本
+- 绝对禁止在HTML美化内容中使用{{}}占位符或模板变量
+- 禁止在HTML美化内容部分添加任何说明文字、注释或解释
+
 核心原则：
 - 专门处理 <state_bar> 标签内容，或在没有状态栏时插入新的状态栏
 - 根据用户需求生成对应的状态栏格式和内容
@@ -701,7 +711,8 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 <好感度>{{江念雪.好感度：显示江念雪当前对<user>的好感度，仅显示阶段名+数值+数值变化，例如：师道尊严 (1/100) [+1]}}</好感度>
 </state_bar>
 
-3. 完整的美化HTML页面（参考用户提供的HTML模板样式，但根据具体的XML结构调整）
+3. 示例正文内容，包含真实数据的完整示例
+4. 完整的美化HTML页面，使用示例正文内容中的真实数据，不使用任何占位符
 
 注意事项：
 - 状态栏内容应该使用模板变量格式，如 {{角色名.属性}}
@@ -778,6 +789,16 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 4. 每个部分只包含纯粹的内容，不要包含任何描述性文字
 5. 回复结束后不要添加任何说明文字或解释
 
+关键规则 - HTML美化内容：
+- HTML美化内容必须是纯净的HTML代码，不能包含任何解释文字或额外内容
+- HTML美化内容必须以<!DOCTYPE html>开头，包含完整的html、head、body结构
+- HTML美化内容必须使用示例正文内容中的真实数据，不要使用任何占位符
+- 例如：如果示例正文内容中是<姓名>艾拉</姓名>，HTML中就应该写"艾拉"，不要写"{{角色.姓名}}"
+- 如果示例正文内容中是<好感度>友好 (50/100)</好感度>，HTML中就应该写"友好 (50/100)"，不要写"{{角色.好感度}}"
+- HTML美化内容是最终展示给用户的内容，必须直接显示真实的数值和文本
+- 绝对禁止在HTML美化内容中使用{{}}占位符或模板变量
+- 禁止在HTML美化内容部分添加任何说明文字、注释或解释
+
 核心原则：
 - 专门处理 <state_bar> 标签内容，或在没有状态栏时插入新的状态栏
 - 根据用户需求生成对应的状态栏格式和内容
@@ -810,7 +831,8 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 <好感度>{{江念雪.好感度：显示江念雪当前对<user>的好感度，仅显示阶段名+数值+数值变化，例如：师道尊严 (1/100) [+1]}}</好感度>
 </state_bar>
 
-3. 完整的美化HTML页面（参考用户提供的HTML模板样式，但根据具体的XML结构调整）
+3. 示例正文内容，包含真实数据的完整示例
+4. 完整的美化HTML页面，使用示例正文内容中的真实数据，不使用任何占位符
 
 注意事项：
 - 状态栏内容应该使用模板变量格式，如 {{角色名.属性}}
@@ -1142,6 +1164,18 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
      */
     function generateRandomDemoText() {
         const randomTexts = [
+            `<state_bar><姓名>艾拉</姓名><称号>风之语者</称号><时间>午后</时间><地点>微风镇</地点><想法>今天的阳光真好。</想法><状态>轻松愉快</状态><好感度>友好 (50/100)</好感度><金钱>120G</金钱></state_bar>
+你走进了微风镇的酒馆，阳光从窗户斜射进来，落在木质的地板上。酒馆老板正在擦拭着一个杯子，看到你进来，他抬起头笑了笑。
+
+"欢迎光临！今天想喝点什么吗？"`,
+
+            `<state_bar><姓名>雷恩</姓名><称号>剑士</称号><时间>黄昏</时间><地点>训练场</地点><想法>需要更多的练习。</想法><状态>专注</状态><好感度>中立 (30/100)</好感度><金钱>75G</金钱><体力>充沛</体力><等级>15</等级></state_bar>
+训练场上，雷恩正在专心致志地练习剑术。汗水从他的额头滴落，但他的眼神依然坚定。
+
+用户：你练得怎么样？
+
+雷恩：还需要更多的努力。成为真正的剑士不是一朝一夕的事。`,
+
             `早上好！今天天气不错呢。
 
 用户：今天有什么计划吗？
@@ -1152,23 +1186,10 @@ AI助手：我想我们可以一起去公园走走，或者在家里看看电影
 
 AI助手：太好了！那我们准备一下就出发吧。`,
 
-            `今天是个特别的日子。
+            `<state_bar><姓名>莉娜</姓名><称号>魔法师</称号><时间>深夜</时间><地点>法师塔</地点><想法>这个咒文很复杂。</想法><状态>思考中</状态><好感度>信任 (70/100)</好感度><金钱>200G</金钱><魔力>丰富</魔力><职业>高级法师</职业></state_bar>
+夜晚的法师塔内，烛光摇曳。莉娜正在翻阅一本古老的魔法书，眉头微皱。
 
-角色：我感觉今天会发生什么有趣的事情。
-
-旁白：窗外的阳光透过百叶窗洒进房间，形成一道道光影。
-
-角色：也许我应该出去走走，看看外面的世界。`,
-
-            `下午时光总是让人感到宁静。
-
-用户：你在想什么？
-
-助手：我在思考如何度过这个美好的下午。也许我们可以一起做点什么？
-
-用户：听起来不错，你有什么建议吗？
-
-助手：我们可以泡一壶茶，然后聊聊彼此的想法。`,
+"这个传送咒文的核心原理竟然是..."她轻声自语道。`,
 
             `夜晚降临，城市开始亮起灯火。
 
@@ -1193,8 +1214,20 @@ AI助手：太好了！那我们准备一下就出发吧。`,
             fullResultLength: fullResult ? fullResult.length : 0
         });
         
-        // 解析状态栏内容
-        const parsedStateBar = parseStateBarContent(stateBarContent);
+        // 获取AI生成的HTML美化内容
+        const aiGeneratedReplacement = document.getElementById('ai-generated-replacement')?.value || '';
+        console.log(`[${EXTENSION_NAME}] AI生成的HTML美化内容:`, aiGeneratedReplacement.substring(0, 200) + '...');
+        
+        // 从 fullResult 中重新提取真实的状态栏和正文内容
+        const realStateBarMatch = fullResult.match(/<state_bar>(.*?)<\/state_bar>/s);
+        const realStateBarContent = realStateBarMatch ? realStateBarMatch[1] : '';
+        const realMainContent = fullResult.replace(/<state_bar>.*?<\/state_bar>/s, '').trim();
+        
+        console.log(`[${EXTENSION_NAME}] 真实状态栏内容:`, realStateBarContent);
+        console.log(`[${EXTENSION_NAME}] 真实正文内容:`, realMainContent);
+        
+        // 解析真实的状态栏内容
+        const parsedStateBar = parseStateBarContent(realStateBarContent);
         console.log(`[${EXTENSION_NAME}] 解析后的状态栏HTML:`, parsedStateBar.html);
         
         // 创建弹窗HTML
@@ -1205,19 +1238,11 @@ AI助手：太好了！那我们准备一下就出发吧。`,
                 </div>
                 
                 <div class="preview-content">
-                    <!-- 状态栏显示 -->
-                    <div class="status-bar-section">
-                        <h4>📊 状态栏</h4>
-                        <div class="status-bar-display">
-                            ${parsedStateBar.html}
-                        </div>
-                    </div>
-                    
-                    <!-- 正文显示 -->
-                    <div class="main-content-section">
-                        <h4>📝 正文内容</h4>
-                        <div class="main-content-display">
-                            ${formatMainContent(mainContent)}
+                    <!-- 统一渲染区域：直接渲染AI生成的HTML美化内容 -->
+                    <div class="unified-content-section">
+                        <h4>📱 渲染效果 (AI生成的HTML页面效果)</h4>
+                        <div class="html-render-frame" id="html-render-container">
+                            <!-- HTML内容将通过JavaScript动态插入 -->
                         </div>
                     </div>
                     
@@ -1250,11 +1275,120 @@ AI助手：太好了！那我们准备一下就出发吧。`,
                 wide: true,
                 large: true,
                 allowVerticalScrolling: true,
-                okButton: '关闭预览'
+                okButton: '关闭预览',
+                onOpen: () => {
+                    console.log(`[${EXTENSION_NAME}] 预览弹窗已打开，开始插入HTML内容`);
+                    
+                    // 延迟插入HTML内容，确保DOM已渲染
+                    setTimeout(() => {
+                        const htmlContainer = document.getElementById('html-render-container');
+                        if (htmlContainer && aiGeneratedReplacement) {
+                            console.log(`[${EXTENSION_NAME}] 找到HTML容器，开始插入内容`);
+                            
+                            try {
+                                // 清理AI生成的HTML内容
+                                const cleanedHtml = cleanAIGeneratedHTML(aiGeneratedReplacement);
+                                console.log(`[${EXTENSION_NAME}] HTML内容已清理:`, cleanedHtml.substring(0, 200) + '...');
+                                
+                                // 使用innerHTML直接插入HTML内容
+                                htmlContainer.innerHTML = cleanedHtml;
+                                console.log(`[${EXTENSION_NAME}] HTML内容插入成功`);
+                            } catch (error) {
+                                console.error(`[${EXTENSION_NAME}] HTML内容插入失败:`, error);
+                                htmlContainer.innerHTML = `
+                                    <div style="padding: 20px; color: #dc3545; text-align: center;">
+                                        <h3>⚠️ HTML渲染失败</h3>
+                                        <p>AI生成的HTML内容无法正确渲染</p>
+                                        <pre style="background: #f8f9fa; padding: 10px; border-radius: 4px; overflow: auto; max-height: 200px; text-align: left;">
+                                            ${escapeHtml(aiGeneratedReplacement)}
+                                        </pre>
+                                    </div>
+                                `;
+                            }
+                        } else if (htmlContainer) {
+                            console.warn(`[${EXTENSION_NAME}] 没有AI生成的HTML内容可以插入`);
+                            htmlContainer.innerHTML = `
+                                <div style="padding: 20px; color: #6c757d; text-align: center;">
+                                    <h3>📝 无HTML内容</h3>
+                                    <p>没有找到AI生成的HTML美化内容</p>
+                                </div>
+                            `;
+                        } else {
+                            console.error(`[${EXTENSION_NAME}] 找不到HTML容器元素`);
+                        }
+                    }, 100);
+                }
             });
         } else {
             console.error(`[${EXTENSION_NAME}] callGenericPopup 不可用`);
         }
+    }
+
+    /**
+     * 清理AI生成的HTML内容，移除额外的文本和格式
+     */
+    function cleanAIGeneratedHTML(htmlContent) {
+        console.log(`[${EXTENSION_NAME}] 开始清理HTML内容`);
+        
+        if (!htmlContent || typeof htmlContent !== 'string') {
+            console.warn(`[${EXTENSION_NAME}] HTML内容为空或格式无效`);
+            return '';
+        }
+        
+        let cleaned = htmlContent.trim();
+        
+        // 查找DOCTYPE声明的开始
+        const doctypeIndex = cleaned.search(/<!DOCTYPE\s+html/i);
+        if (doctypeIndex > 0) {
+            // 如果DOCTYPE前面有其他内容，移除它们
+            cleaned = cleaned.substring(doctypeIndex);
+            console.log(`[${EXTENSION_NAME}] 移除了DOCTYPE前的额外内容`);
+        } else if (doctypeIndex === -1) {
+            // 如果没有DOCTYPE，查找<html>标签
+            const htmlIndex = cleaned.search(/<html/i);
+            if (htmlIndex > 0) {
+                cleaned = cleaned.substring(htmlIndex);
+                console.log(`[${EXTENSION_NAME}] 移除了<html>前的额外内容`);
+            } else if (htmlIndex === -1) {
+                // 如果没有完整HTML结构，查找主要内容
+                const bodyMatch = cleaned.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+                if (bodyMatch) {
+                    // 如果找到body内容，包装成完整HTML
+                    cleaned = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>状态栏预览</title>
+</head>
+<body>
+${bodyMatch[1]}
+</body>
+</html>`;
+                    console.log(`[${EXTENSION_NAME}] 提取并包装了body内容`);
+                }
+            }
+        }
+        
+        // 查找HTML结束标签
+        const htmlEndIndex = cleaned.lastIndexOf('</html>');
+        if (htmlEndIndex !== -1) {
+            // 如果HTML结束标签后面还有内容，移除它们
+            const afterHtml = cleaned.substring(htmlEndIndex + 7).trim();
+            if (afterHtml.length > 0) {
+                cleaned = cleaned.substring(0, htmlEndIndex + 7);
+                console.log(`[${EXTENSION_NAME}] 移除了</html>后的额外内容:`, afterHtml.substring(0, 100));
+            }
+        }
+        
+        // 移除可能的代码块标记
+        cleaned = cleaned.replace(/^```html\s*/i, '').replace(/\s*```$/, '');
+        
+        // 移除JavaScript代码（出于安全考虑）
+        cleaned = cleaned.replace(/<script[\s\S]*?<\/script>/gi, '');
+        
+        console.log(`[${EXTENSION_NAME}] HTML清理完成，最终长度:`, cleaned.length);
+        return cleaned;
     }
 
     /**
@@ -1267,7 +1401,7 @@ AI助手：太好了！那我们准备一下就出发吧。`,
     }
 
     /**
-     * 解析状态栏内容
+     * 解析状态栏内容，支持更多标签类型
      */
     function parseStateBarContent(stateBarContent) {
         console.log(`[${EXTENSION_NAME}] 解析状态栏内容:`, stateBarContent);
@@ -1277,36 +1411,54 @@ AI助手：太好了！那我们准备一下就出发吧。`,
             return { html: '<div class="no-status-bar">无状态栏内容</div>' };
         }
         
-        let html = '<div class="status-items">';
+        let html = '<div class="status-bar-container">';
         let foundAnyItem = false;
         
-        // 解析时间
-        const timeMatch = stateBarContent.match(/<时间>(.*?)<\/时间>/);
-        if (timeMatch) {
-            html += `<div class="status-item time-item">🕐 ${escapeHtml(timeMatch[1])}</div>`;
-            foundAnyItem = true;
-            console.log(`[${EXTENSION_NAME}] 找到时间:`, timeMatch[1]);
-        }
+        // 定义所有支持的状态栏标签及其图标
+        const statusTags = [
+            { tag: '角色', icon: '👤', class: 'name-item' },
+            { tag: '姓名', icon: '👤', class: 'name-item' },
+            { tag: '称号', icon: '🎭', class: 'title-item' },
+            { tag: '时间', icon: '🕐', class: 'time-item' },
+            { tag: '日期', icon: '📅', class: 'date-item' },
+            { tag: '星期', icon: '📆', class: 'week-item' },
+            { tag: '地点', icon: '📍', class: 'location-item' },
+            { tag: '想法', icon: '💭', class: 'thought-item' },
+            { tag: '状态', icon: '😊', class: 'mood-item' },
+            { tag: '好感度', icon: '❤️', class: 'affection-item' },
+            { tag: '金钱', icon: '💰', class: 'money-item' },
+            { tag: '体力', icon: '💪', class: 'stamina-item' },
+            { tag: '心情', icon: '🌟', class: 'emotion-item' },
+            { tag: '等级', icon: '⭐', class: 'level-item' },
+            { tag: '职业', icon: '⚔️', class: 'job-item' },
+            { tag: '血量', icon: '🩸', class: 'hp-item' },
+            { tag: '生命值', icon: '🩸', class: 'hp-item' },
+            { tag: '魔力', icon: '🔮', class: 'mp-item' },
+            { tag: '法力值', icon: '🔮', class: 'mp-item' }
+        ];
         
-        // 解析日期
-        const dateMatch = stateBarContent.match(/<日期>(.*?)<\/日期>/);
-        if (dateMatch) {
-            html += `<div class="status-item date-item">📅 ${escapeHtml(dateMatch[1])}</div>`;
-            foundAnyItem = true;
-            console.log(`[${EXTENSION_NAME}] 找到日期:`, dateMatch[1]);
-        }
+        // 创建主要信息区域
+        html += '<div class="main-status-items">';
         
-        // 解析星期
-        const weekMatch = stateBarContent.match(/<星期>(.*?)<\/星期>/);
-        if (weekMatch) {
-            html += `<div class="status-item week-item">📆 ${escapeHtml(weekMatch[1])}</div>`;
-            foundAnyItem = true;
-            console.log(`[${EXTENSION_NAME}] 找到星期:`, weekMatch[1]);
-        }
+        // 解析各种状态标签
+        statusTags.forEach(({ tag, icon, class: className }) => {
+            const regex = new RegExp(`<${tag}>(.*?)<\/${tag}>`, 'g');
+            const match = stateBarContent.match(regex);
+            if (match) {
+                const content = match[0].replace(new RegExp(`<${tag}>(.*?)<\/${tag}>`), '$1');
+                html += `<div class="status-item ${className}">
+                    <span class="status-icon">${icon}</span>
+                    <span class="status-label">${tag}:</span>
+                    <span class="status-value">${escapeHtml(content)}</span>
+                </div>`;
+                foundAnyItem = true;
+                console.log(`[${EXTENSION_NAME}] 找到${tag}:`, content);
+            }
+        });
         
         html += '</div>';
         
-        // 解析选项
+        // 解析选项标签
         const optionMatches = stateBarContent.match(/<Options_\d+>(.*?)<\/Options_\d+>/g);
         if (optionMatches && optionMatches.length > 0) {
             html += '<div class="options-section"><h5>🎯 可选行动：</h5><div class="options-list">';
@@ -1321,6 +1473,8 @@ AI助手：太好了！那我们准备一下就出发吧。`,
             html += '</div></div>';
             console.log(`[${EXTENSION_NAME}] 找到 ${optionMatches.length} 个选项`);
         }
+        
+        html += '</div>';
         
         // 如果没有找到任何标准标签，显示原始内容
         if (!foundAnyItem) {

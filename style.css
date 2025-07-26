@@ -531,6 +531,50 @@ input[type="password"].form-control {
     .tab-button.active {
         border-bottom: 1px solid var(--SmartThemeQuoteColor);
     }
+    
+    /* 统一渲染区域移动端适配 */
+    .unified-content-section {
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+    
+    .unified-content-display {
+        padding: 15px;
+        max-height: 400px;
+    }
+    
+    .main-status-items {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    
+    .status-item {
+        padding: 8px 10px;
+        font-size: 13px;
+    }
+    
+    .status-icon {
+        font-size: 14px;
+    }
+    
+    .preview-popup-container {
+        max-width: 95vw;
+        padding: 10px;
+    }
+    
+    .comparison-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .status-items {
+        flex-direction: column;
+    }
+    
+    .preview-popup-header {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
 }
 
 @media (max-height: 600px) {
@@ -714,6 +758,266 @@ select.form-control {
     max-height: 70vh;
     overflow-y: auto;
     padding-right: 10px;
+}
+
+/* === 统一渲染区域样式 === */
+.unified-content-section {
+    background: var(--SmartThemeBlurTintColor);
+    border: 2px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.unified-content-section h4 {
+    margin: 0 0 15px 0;
+    color: var(--SmartThemeEmColor);
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor);
+}
+
+.unified-content-display {
+    background: var(--SmartThemeBodyColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    padding: 20px;
+    min-height: 300px;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+/* === HTML渲染框架样式 === */
+.html-render-frame {
+    background: #ffffff;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    padding: 0;
+    min-height: 400px;
+    max-height: 600px;
+    overflow-y: auto;
+    position: relative;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* 重置HTML渲染框架内的样式，让AI生成的HTML能够正常渲染 */
+.html-render-frame * {
+    box-sizing: border-box;
+}
+
+.html-render-frame html,
+.html-render-frame body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background: #ffffff;
+}
+
+/* 确保HTML内容能够完整显示 */
+.html-render-frame > * {
+    display: block;
+    width: 100%;
+}
+
+/* 如果AI生成的HTML包含完整的HTML结构 */
+.html-render-frame > html {
+    height: 100%;
+}
+
+.html-render-frame > html > body {
+    margin: 0;
+    padding: 20px;
+    min-height: 100%;
+}
+
+/* 如果AI生成的HTML只是body内容 */
+.html-render-frame > :not(html) {
+    padding: 20px;
+}
+
+/* 保持AI生成的样式完整性 */
+.html-render-frame style {
+    display: block !important;
+}
+
+.html-render-frame script {
+    display: none !important;
+}
+
+/* 响应式适配 */
+@media (max-width: 768px) {
+    .html-render-frame {
+        min-height: 300px;
+        max-height: 400px;
+    }
+    
+    .html-render-frame > :not(html) {
+        padding: 15px;
+    }
+    
+    .html-render-frame > html > body {
+        padding: 15px;
+    }
+}
+
+/* === 集成状态栏样式 === */
+.integrated-status-bar {
+    margin-bottom: 15px;
+}
+
+.status-bar-container {
+    background: rgba(33, 150, 243, 0.05);
+    border: 1px solid rgba(33, 150, 243, 0.2);
+    border-radius: 8px;
+    padding: 15px;
+}
+
+.main-status-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 12px;
+    margin-bottom: 15px;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--SmartThemeBodyColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.status-item:hover {
+    background: var(--SmartThemeBlurTintColor);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.status-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.status-label {
+    font-weight: 600;
+    color: var(--SmartThemeQuoteColor);
+    flex-shrink: 0;
+}
+
+.status-value {
+    color: var(--SmartThemeEmColor);
+    flex: 1;
+    word-break: break-word;
+}
+
+/* === 不同类型状态项的特殊样式 === */
+.name-item {
+    background: rgba(76, 175, 80, 0.1);
+    border-color: rgba(76, 175, 80, 0.3);
+}
+
+.title-item {
+    background: rgba(156, 39, 176, 0.1);
+    border-color: rgba(156, 39, 176, 0.3);
+}
+
+.time-item {
+    background: rgba(255, 152, 0, 0.1);
+    border-color: rgba(255, 152, 0, 0.3);
+}
+
+.date-item {
+    background: rgba(33, 150, 243, 0.1);
+    border-color: rgba(33, 150, 243, 0.3);
+}
+
+.week-item {
+    background: rgba(103, 58, 183, 0.1);
+    border-color: rgba(103, 58, 183, 0.3);
+}
+
+.location-item {
+    background: rgba(244, 67, 54, 0.1);
+    border-color: rgba(244, 67, 54, 0.3);
+}
+
+.thought-item {
+    background: rgba(255, 193, 7, 0.1);
+    border-color: rgba(255, 193, 7, 0.3);
+}
+
+.mood-item {
+    background: rgba(233, 30, 99, 0.1);
+    border-color: rgba(233, 30, 99, 0.3);
+}
+
+.affection-item {
+    background: rgba(233, 30, 99, 0.15);
+    border-color: rgba(233, 30, 99, 0.4);
+}
+
+.money-item {
+    background: rgba(255, 193, 7, 0.15);
+    border-color: rgba(255, 193, 7, 0.4);
+}
+
+.stamina-item {
+    background: rgba(76, 175, 80, 0.1);
+    border-color: rgba(76, 175, 80, 0.3);
+}
+
+.emotion-item {
+    background: rgba(156, 39, 176, 0.1);
+    border-color: rgba(156, 39, 176, 0.3);
+}
+
+.level-item {
+    background: rgba(255, 152, 0, 0.1);
+    border-color: rgba(255, 152, 0, 0.3);
+}
+
+.job-item {
+    background: rgba(96, 125, 139, 0.1);
+    border-color: rgba(96, 125, 139, 0.3);
+}
+
+.hp-item {
+    background: rgba(244, 67, 54, 0.1);
+    border-color: rgba(244, 67, 54, 0.3);
+}
+
+.mp-item {
+    background: rgba(63, 81, 181, 0.1);
+    border-color: rgba(63, 81, 181, 0.3);
+}
+
+/* === 内容分隔线样式 === */
+.content-divider {
+    height: 2px;
+    background: linear-gradient(90deg, 
+        transparent 0%, 
+        var(--SmartThemeBorderColor) 20%, 
+        var(--SmartThemeQuoteColor) 50%, 
+        var(--SmartThemeBorderColor) 80%, 
+        transparent 100%);
+    margin: 20px 0;
+    border-radius: 1px;
+}
+
+/* === 集成正文内容样式 === */
+.integrated-main-content {
+    line-height: 1.6;
+    color: var(--SmartThemeEmColor);
 }
 
 /* === 状态栏显示区域 === */
