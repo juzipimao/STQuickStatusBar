@@ -791,63 +791,25 @@ select.form-control {
 
 /* === HTML渲染框架样式 === */
 .html-render-frame {
-    background: #ffffff;
+    background: var(--SmartThemeBodyColor);
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 8px;
     padding: 0;
     min-height: 400px;
     max-height: 600px;
-    overflow-y: auto;
+    overflow: hidden;
     position: relative;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* 重置HTML渲染框架内的样式，让AI生成的HTML能够正常渲染 */
-.html-render-frame * {
-    box-sizing: border-box;
-}
-
-.html-render-frame html,
-.html-render-frame body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-    line-height: 1.6;
-    color: #333;
-    background: #ffffff;
-}
-
-/* 确保HTML内容能够完整显示 */
-.html-render-frame > * {
+/* iframe样式 */
+.html-render-frame iframe {
+    width: 100% !important;
+    height: 100% !important;
+    border: none !important;
+    border-radius: 8px;
+    background-color: #ffffff;
     display: block;
-    width: 100%;
-}
-
-/* 如果AI生成的HTML包含完整的HTML结构 */
-.html-render-frame > html {
-    height: 100%;
-}
-
-.html-render-frame > html > body {
-    margin: 0;
-    padding: 20px;
-    min-height: 100%;
-}
-
-/* 如果AI生成的HTML只是body内容 */
-.html-render-frame > :not(html) {
-    padding: 20px;
-}
-
-/* 保持AI生成的样式完整性 */
-.html-render-frame style {
-    display: block !important;
-}
-
-.html-render-frame script {
-    display: none !important;
 }
 
 /* 响应式适配 */
@@ -855,14 +817,6 @@ select.form-control {
     .html-render-frame {
         min-height: 300px;
         max-height: 400px;
-    }
-    
-    .html-render-frame > :not(html) {
-        padding: 15px;
-    }
-    
-    .html-render-frame > html > body {
-        padding: 15px;
     }
 }
 

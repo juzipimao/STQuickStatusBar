@@ -1290,9 +1290,9 @@ AI助手：太好了！那我们准备一下就出发吧。`,
                                 const cleanedHtml = cleanAIGeneratedHTML(aiGeneratedReplacement);
                                 console.log(`[${EXTENSION_NAME}] HTML内容已清理:`, cleanedHtml.substring(0, 200) + '...');
                                 
-                                // 使用innerHTML直接插入HTML内容
-                                htmlContainer.innerHTML = cleanedHtml;
-                                console.log(`[${EXTENSION_NAME}] HTML内容插入成功`);
+                                // 使用iframe渲染完整HTML文档
+                                renderHTMLInIframe(htmlContainer, cleanedHtml);
+                                console.log(`[${EXTENSION_NAME}] HTML内容已在iframe中渲染`);
                             } catch (error) {
                                 console.error(`[${EXTENSION_NAME}] HTML内容插入失败:`, error);
                                 htmlContainer.innerHTML = `
@@ -1325,6 +1325,114 @@ AI助手：太好了！那我们准备一下就出发吧。`,
     }
 
     /**
+     * 在iframe中渲染完整HTML文档
+     */
+    function renderHTMLInIframe(container, htmlContent) {
+        console.log(`[${EXTENSION_NAME}] 开始在iframe中渲染HTML`);
+        
+        // 清空容器
+        container.innerHTML = '';
+        
+        // 创建iframe元素
+        const iframe = document.createElement('iframe');
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.style.border = 'none';
+        iframe.style.borderRadius = '8px';
+        iframe.style.minHeight = '400px';
+        iframe.style.backgroundColor = '#ffffff';
+        
+        // 将iframe添加到容器
+        container.appendChild(iframe);
+        
+        // 获取iframe的document对象
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+        
+        // 写入HTML内容
+        iframeDoc.open();
+        iframeDoc.write(htmlContent);
+        iframeDoc.close();
+        
+        // 监听iframe加载完成
+        iframe.onload = () => {
+            console.log(`[${EXTENSION_NAME}] iframe HTML渲染完成`);
+            
+            // 自动调整iframe高度以适应内容
+            try {
+                const iframeBody = iframe.contentDocument.body;
+                if (iframeBody) {
+                    const contentHeight = Math.max(
+                        iframeBody.scrollHeight,
+                        iframeBody.offsetHeight,
+                        iframe.contentDocument.documentElement.scrollHeight,
+                        iframe.contentDocument.documentElement.offsetHeight
+                    );
+                    
+                    // 设置合理的高度范围
+                    const finalHeight = Math.min(Math.max(contentHeight + 20, 200), 600);
+                    iframe.style.height = finalHeight + 'px';
+                    
+                    console.log(`[${EXTENSION_NAME}] iframe高度调整为: ${finalHeight}px`);
+                }
+            } catch (error) {
+                console.warn(`[${EXTENSION_NAME}] 无法自动调整iframe高度:`, error);
+            }
+        };
+        
+        console.log(`[${EXTENSION_NAME}] iframe创建并渲染完成`);
+    }
+
+    /**
+     * 提取HTML文档中的body内容和样式
+     */
+    function extractBodyContent(htmlContent) {
+        console.log(`[${EXTENSION_NAME}] 开始提取body内容`);
+        
+        if (!htmlContent || typeof htmlContent !== 'string') {
+            console.warn(`[${EXTENSION_NAME}] HTML内容为空或格式无效`);
+            return '<div style="padding: 20px; color: #6c757d; text-align: center;">无HTML内容</div>';
+        }
+        
+        // 创建临时DOM来解析HTML
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent;
+        
+        // 提取样式
+        let styles = '';
+        const styleElements = tempDiv.querySelectorAll('style');
+        styleElements.forEach(styleEl => {
+            styles += styleEl.innerHTML + '\n';
+        });
+        
+        // 提取body内容
+        let bodyContent = '';
+        const bodyElement = tempDiv.querySelector('body');
+        if (bodyElement) {
+            bodyContent = bodyElement.innerHTML;
+            console.log(`[${EXTENSION_NAME}] 成功提取body内容`);
+        } else {
+            // 如果没有body标签，使用整个内容（但排除head内容）
+            const headElement = tempDiv.querySelector('head');
+            if (headElement) {
+                headElement.remove();
+            }
+            bodyContent = tempDiv.innerHTML;
+            console.log(`[${EXTENSION_NAME}] 没有找到body标签，使用整个内容`);
+        }
+        
+        // 组合样式和内容
+        let result = '';
+        if (styles.trim()) {
+            result += `<style>\n${styles}</style>\n`;
+            console.log(`[${EXTENSION_NAME}] 添加了提取的CSS样式`);
+        }
+        result += bodyContent;
+        
+        console.log(`[${EXTENSION_NAME}] Body内容提取完成，最终长度:`, result.length);
+        return result;
+    }
+
+    /**
      * 清理AI生成的HTML内容，移除额外的文本和格式
      */
     function cleanAIGeneratedHTML(htmlContent) {
@@ -1336,6 +1444,17 @@ AI助手：太好了！那我们准备一下就出发吧。`,
         }
         
         let cleaned = htmlContent.trim();
+        
+        // 首先，分离HTML代码和正文内容
+        // 查找HTML结束标签后的正文内容
+        const htmlEndMatch = cleaned.match(/<\/html>\s*(.+)$/s);
+        let separatedText = '';
+        if (htmlEndMatch && htmlEndMatch[1]) {
+            separatedText = htmlEndMatch[1].trim();
+            // 移除HTML后的正文内容，只保留HTML部分
+            cleaned = cleaned.replace(/<\/html>\s*(.+)$/s, '</html>');
+            console.log(`[${EXTENSION_NAME}] 发现并分离了HTML后的正文内容:`, separatedText.substring(0, 100) + '...');
+        }
         
         // 查找DOCTYPE声明的开始
         const doctypeIndex = cleaned.search(/<!DOCTYPE\s+html/i);
@@ -1373,12 +1492,16 @@ ${bodyMatch[1]}
         // 查找HTML结束标签
         const htmlEndIndex = cleaned.lastIndexOf('</html>');
         if (htmlEndIndex !== -1) {
-            // 如果HTML结束标签后面还有内容，移除它们
-            const afterHtml = cleaned.substring(htmlEndIndex + 7).trim();
-            if (afterHtml.length > 0) {
-                cleaned = cleaned.substring(0, htmlEndIndex + 7);
-                console.log(`[${EXTENSION_NAME}] 移除了</html>后的额外内容:`, afterHtml.substring(0, 100));
+            // 确保HTML结构完整，不需要额外处理
+            console.log(`[${EXTENSION_NAME}] HTML结构完整`);
+        } else {
+            // 如果HTML不完整，尝试自动补全
+            if (cleaned.includes('<body>') && !cleaned.includes('</body>')) {
+                cleaned += '</body></html>';
+            } else if (cleaned.includes('<html>') && !cleaned.includes('</html>')) {
+                cleaned += '</html>';
             }
+            console.log(`[${EXTENSION_NAME}] 自动补全了HTML结构`);
         }
         
         // 移除可能的代码块标记
@@ -1388,6 +1511,8 @@ ${bodyMatch[1]}
         cleaned = cleaned.replace(/<script[\s\S]*?<\/script>/gi, '');
         
         console.log(`[${EXTENSION_NAME}] HTML清理完成，最终长度:`, cleaned.length);
+        console.log(`[${EXTENSION_NAME}] 清理后的HTML预览:`, cleaned.substring(0, 200) + '...');
+        
         return cleaned;
     }
 
