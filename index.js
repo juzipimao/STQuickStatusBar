@@ -273,7 +273,7 @@
             trimStrings: [],
             placement: [1, 2], // 影响用户输入和AI输出
             disabled: false,
-            markdownOnly: false,
+            markdownOnly: true, // 启用紧格式显示
             promptOnly: false,
             runOnEdit: false,
             substituteRegex: 0,
