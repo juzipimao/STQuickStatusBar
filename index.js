@@ -26,6 +26,7 @@
     let callGenericPopup, POPUP_TYPE, POPUP_RESULT;
     let getContext, writeExtensionField, characters, this_chid;
     let uuidv4, toastr;
+    let loadRegexScripts, reloadCurrentChat, getCurrentChatId;
     
     // 默认设置
     let extensionSettings = {
@@ -83,9 +84,13 @@
             const scriptModule = await import('/script.js');
             characters = scriptModule.characters;
             this_chid = scriptModule.this_chid;
+            reloadCurrentChat = scriptModule.reloadCurrentChat;
+            getCurrentChatId = scriptModule.getCurrentChatId;
             console.log(`[${EXTENSION_NAME}] 主脚本模块导入成功:`, {
                 characters: typeof characters,
-                this_chid: typeof this_chid
+                this_chid: typeof this_chid,
+                reloadCurrentChat: typeof reloadCurrentChat,
+                getCurrentChatId: typeof getCurrentChatId
             });
 
             // 导入工具模块
@@ -100,6 +105,20 @@
             console.log(`[${EXTENSION_NAME}] 检查全局 toastr`);
             toastr = window.toastr;
             console.log(`[${EXTENSION_NAME}] toastr 可用性:`, typeof toastr);
+
+            // 导入正则扩展模块（用于刷新功能）
+            console.log(`[${EXTENSION_NAME}] 导入正则扩展模块: /scripts/extensions/regex/index.js`);
+            try {
+                const regexModule = await import('/scripts/extensions/regex/index.js');
+                loadRegexScripts = regexModule.default?.loadRegexScripts || window.loadRegexScripts;
+                console.log(`[${EXTENSION_NAME}] 正则扩展模块导入:`, {
+                    loadRegexScripts: typeof loadRegexScripts
+                });
+            } catch (error) {
+                console.warn(`[${EXTENSION_NAME}] 正则扩展模块导入失败，尝试从全局获取:`, error);
+                loadRegexScripts = window.loadRegexScripts;
+                console.log(`[${EXTENSION_NAME}] 从全局获取 loadRegexScripts:`, typeof loadRegexScripts);
+            }
 
             console.log(`[${EXTENSION_NAME}] 所有SillyTavern模块导入成功`);
             return true;
@@ -352,6 +371,36 @@
             }
 
             console.log(`[${EXTENSION_NAME}] 正则脚本已保存到角色: ${characterInfo.name}`);
+            
+            // 8. 触发UI刷新 - 关键修复：调用SillyTavern的刷新函数
+            console.log(`[${EXTENSION_NAME}] 开始刷新正则脚本UI`);
+            try {
+                // 刷新正则脚本列表UI
+                if (typeof loadRegexScripts === 'function') {
+                    await loadRegexScripts();
+                    console.log(`[${EXTENSION_NAME}] 正则脚本UI已刷新`);
+                } else {
+                    console.warn(`[${EXTENSION_NAME}] loadRegexScripts函数不可用，跳过UI刷新`);
+                }
+                
+                // 重新加载当前聊天以应用正则变更
+                if (typeof reloadCurrentChat === 'function' && typeof getCurrentChatId === 'function') {
+                    const currentChatId = getCurrentChatId();
+                    if (currentChatId !== undefined && currentChatId !== null) {
+                        await reloadCurrentChat();
+                        console.log(`[${EXTENSION_NAME}] 当前聊天已重新加载`);
+                    } else {
+                        console.log(`[${EXTENSION_NAME}] 没有当前聊天，跳过重新加载`);
+                    }
+                } else {
+                    console.warn(`[${EXTENSION_NAME}] 聊天重载函数不可用，跳过聊天重载`);
+                }
+            } catch (refreshError) {
+                console.error(`[${EXTENSION_NAME}] 刷新UI时出错:`, refreshError);
+                console.error(`[${EXTENSION_NAME}] 刷新错误堆栈:`, refreshError.stack);
+                // 不抛出错误，因为保存已经成功
+            }
+            
             return true;
             
         } catch (error) {
