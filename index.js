@@ -290,6 +290,13 @@
         if (window.extension_settings && window.extension_settings[EXTENSION_NAME]) {
             Object.assign(extensionSettings, window.extension_settings[EXTENSION_NAME]);
         }
+        
+        // 尝试从浏览器存储加载API配置
+        const hasBrowserConfig = loadAPIConfigFromBrowser();
+        if (hasBrowserConfig) {
+            console.log(`[${EXTENSION_NAME}] API配置已从浏览器存储恢复`);
+        }
+        
         console.log(`[${EXTENSION_NAME}] 设置已加载:`, extensionSettings);
     }
 
@@ -683,6 +690,11 @@
                                 <input type="text" id="custom-model" class="form-control"
                                        placeholder="模型名称" value="${extensionSettings.customModel}">
                             </div>
+                        </div>
+
+                        <!-- 自动保存指示器 -->
+                        <div class="form-group">
+                            <span id="api-save-indicator" class="save-indicator" style="display: none;">✓ 已保存</span>
                         </div>
 
                         <!-- AI提示输入 -->
@@ -1991,6 +2003,44 @@ ${bodyMatch[1]}
     }
 
     /**
+     * 为内容添加代码块包裹
+     */
+    function wrapWithCodeBlocks(content) {
+        if (!content || typeof content !== 'string') {
+            return content;
+        }
+
+        const trimmedContent = content.trim();
+        
+        // 如果已经有代码块包裹，直接返回
+        if (trimmedContent.startsWith('```') && trimmedContent.endsWith('```')) {
+            console.log(`[${EXTENSION_NAME}] 内容已有代码块包裹，保持原样`);
+            return content;
+        }
+
+        // 检测内容类型并添加适当的代码块包裹
+        let wrappedContent;
+        
+        if (trimmedContent.toLowerCase().includes('<!doctype html') || 
+            trimmedContent.toLowerCase().includes('<html') ||
+            (trimmedContent.includes('<') && trimmedContent.includes('</') && trimmedContent.includes('>'))) {
+            // HTML内容
+            wrappedContent = '```html\n' + trimmedContent + '\n```';
+            console.log(`[${EXTENSION_NAME}] 检测为HTML内容，添加html代码块包裹`);
+        } else if (trimmedContent.includes('{') && trimmedContent.includes('}')) {
+            // 可能是JSON或CSS内容
+            wrappedContent = '```\n' + trimmedContent + '\n```';
+            console.log(`[${EXTENSION_NAME}] 检测为结构化内容，添加普通代码块包裹`);
+        } else {
+            // 普通文本内容
+            wrappedContent = '```\n' + trimmedContent + '\n```';
+            console.log(`[${EXTENSION_NAME}] 添加普通代码块包裹`);
+        }
+
+        return wrappedContent;
+    }
+
+    /**
      * 应用AI生成的结果到手动创建页面
      */
     function applyAIResult() {
@@ -1998,11 +2048,17 @@ ${bodyMatch[1]}
 
         try {
             const aiPattern = document.getElementById('ai-generated-pattern')?.value || '';
-            const aiReplacement = document.getElementById('ai-generated-replacement')?.value || '';
+            let aiReplacement = document.getElementById('ai-generated-replacement')?.value || '';
 
             if (!aiPattern) {
                 showStatus('❌ 没有AI生成的正则表达式可以应用', true);
                 return;
+            }
+
+            // 为替换内容添加代码块包裹
+            if (aiReplacement) {
+                aiReplacement = wrapWithCodeBlocks(aiReplacement);
+                console.log(`[${EXTENSION_NAME}] 替换内容已处理，长度: ${aiReplacement.length}`);
             }
 
             // 切换到手动创建页面
@@ -2025,7 +2081,7 @@ ${bodyMatch[1]}
                 manualPattern.dispatchEvent(event);
             }
 
-            showStatus('✅ AI生成的结果已应用到手动创建页面');
+            showStatus('✅ AI生成的结果已应用到手动创建页面（替换内容已添加代码块包裹）');
 
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 应用AI结果失败:`, error);
@@ -2071,9 +2127,9 @@ ${bodyMatch[1]}
     }
 
     /**
-     * 保存AI设置
+     * 自动保存API配置到浏览器存储
      */
-    function saveAISettings() {
+    function autoSaveAPIConfig() {
         try {
             const provider = document.getElementById('ai-provider')?.value;
             const geminiKey = document.getElementById('gemini-api-key')?.value;
@@ -2082,6 +2138,22 @@ ${bodyMatch[1]}
             const customKey = document.getElementById('custom-api-key')?.value;
             const customModel = document.getElementById('custom-model')?.value;
 
+            // 构建配置对象
+            const config = {
+                aiProvider: provider || extensionSettings.aiProvider,
+                geminiApiKey: geminiKey || extensionSettings.geminiApiKey,
+                defaultModel: geminiModel || extensionSettings.defaultModel,
+                customApiUrl: customUrl || extensionSettings.customApiUrl,
+                customApiKey: customKey || extensionSettings.customApiKey,
+                customModel: customModel || extensionSettings.customModel,
+                lastSaved: new Date().toISOString()
+            };
+
+            // 立即保存到localStorage作为临时缓存
+            const localStorageKey = `${EXTENSION_NAME}_APIConfig`;
+            localStorage.setItem(localStorageKey, JSON.stringify(config));
+
+            // 更新内存中的设置
             if (provider) extensionSettings.aiProvider = provider;
             if (geminiKey) extensionSettings.geminiApiKey = geminiKey;
             if (geminiModel) extensionSettings.defaultModel = geminiModel;
@@ -2089,11 +2161,72 @@ ${bodyMatch[1]}
             if (customKey) extensionSettings.customApiKey = customKey;
             if (customModel) extensionSettings.customModel = customModel;
 
+            // 保存到SillyTavern全局设置
             saveSettings();
-            console.log(`[${EXTENSION_NAME}] AI设置已保存`);
+            
+            // 显示保存成功指示器
+            showAutoSaveIndicator(true);
+            console.log(`[${EXTENSION_NAME}] API配置已自动保存`);
         } catch (error) {
-            console.error(`[${EXTENSION_NAME}] 保存AI设置失败:`, error);
+            console.error(`[${EXTENSION_NAME}] 自动保存API配置失败:`, error);
+            showAutoSaveIndicator(false);
         }
+    }
+
+    /**
+     * 从浏览器存储加载API配置
+     */
+    function loadAPIConfigFromBrowser() {
+        try {
+            const localStorageKey = `${EXTENSION_NAME}_APIConfig`;
+            const savedConfig = localStorage.getItem(localStorageKey);
+            
+            if (savedConfig) {
+                const config = JSON.parse(savedConfig);
+                console.log(`[${EXTENSION_NAME}] 从浏览器加载API配置:`, config);
+                
+                // 将保存的配置合并到extensionSettings
+                Object.assign(extensionSettings, {
+                    aiProvider: config.aiProvider || extensionSettings.aiProvider,
+                    geminiApiKey: config.geminiApiKey || extensionSettings.geminiApiKey,
+                    defaultModel: config.defaultModel || extensionSettings.defaultModel,
+                    customApiUrl: config.customApiUrl || extensionSettings.customApiUrl,
+                    customApiKey: config.customApiKey || extensionSettings.customApiKey,
+                    customModel: config.customModel || extensionSettings.customModel
+                });
+                
+                return true;
+            }
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 从浏览器加载API配置失败:`, error);
+        }
+        return false;
+    }
+
+    /**
+     * 显示自动保存指示器
+     */
+    function showAutoSaveIndicator(success = true) {
+        const indicator = document.getElementById('api-save-indicator');
+        if (!indicator) return;
+        
+        indicator.style.display = 'inline-block';
+        indicator.className = `save-indicator ${success ? 'success' : 'error'}`;
+        indicator.textContent = success ? '✓ 已保存' : '✗ 保存失败';
+        
+        // 2秒后隐藏指示器
+        setTimeout(() => {
+            if (indicator) {
+                indicator.style.display = 'none';
+            }
+        }, 2000);
+    }
+
+    /**
+     * 保存AI设置（保持向后兼容）
+     */
+    function saveAISettings() {
+        autoSaveAPIConfig();
     }
 
     /**
@@ -2279,17 +2412,20 @@ ${bodyMatch[1]}
             clearHistoryBtn.addEventListener('click', clearConversationHistory);
         }
 
-        // AI配置字段自动保存
+        // AI配置字段自动保存（实时保存）
         const aiConfigFields = [
-            'gemini-api-key', 'gemini-model',
+            'ai-provider', 'gemini-api-key', 'gemini-model',
             'custom-api-url', 'custom-api-key', 'custom-model'
         ];
 
         aiConfigFields.forEach(fieldId => {
             const field = document.getElementById(fieldId);
             if (field) {
-                field.addEventListener('change', saveAISettings);
-                field.addEventListener('blur', saveAISettings);
+                // 添加实时保存监听器
+                field.addEventListener('input', autoSaveAPIConfig);
+                field.addEventListener('change', autoSaveAPIConfig);
+                field.addEventListener('blur', autoSaveAPIConfig);
+                console.log(`[${EXTENSION_NAME}] 为字段 ${fieldId} 添加了自动保存监听器`);
             }
         });
 
