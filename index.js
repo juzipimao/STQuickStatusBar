@@ -1659,10 +1659,10 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
     }
 
     /**
-     * 预览AI生成的结果应用效果
+     * 预览AI生成的结果应用效果 - 内联展示版本
      */
     function previewAIResult() {
-        console.log(`[${EXTENSION_NAME}] 预览AI生成的结果效果`);
+        console.log(`[${EXTENSION_NAME}] 预览AI生成的结果效果 - 内联模式`);
 
         try {
             const aiPattern = document.getElementById('ai-generated-pattern')?.value || '';
@@ -1677,6 +1677,11 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
             if (!demoText.trim()) {
                 // 如果用户没有输入示例文本，使用默认的随机正文
                 demoText = generateRandomDemoText();
+                // 更新demo-text输入框内容
+                const demoTextElement = document.getElementById('demo-text');
+                if (demoTextElement) {
+                    demoTextElement.value = demoText;
+                }
             }
 
             // 验证正则表达式
@@ -1698,30 +1703,335 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
                 return;
             }
 
-            // 提取状态栏和正文
-            const stateBarMatch = result.match(/<state_bar>.*?<\/state_bar>/s);
-            const stateBarContent = stateBarMatch ? stateBarMatch[0] : '';
-            const mainContent = result.replace(/<state_bar>.*?<\/state_bar>/s, '').trim();
-
-            console.log(`[${EXTENSION_NAME}] 提取的状态栏内容:`, stateBarContent);
-            console.log(`[${EXTENSION_NAME}] 提取的正文内容:`, mainContent);
-
-            // 打开弹窗显示预览效果
-            openPreviewPopup(stateBarContent, mainContent, demoText, result);
+            // 显示内联预览
+            showInlinePreview(aiReplacement, demoText, result);
 
             // 显示统计信息
             const matches = Array.from(demoText.matchAll(regex));
             const matchCount = matches.length;
 
             if (matchCount > 0) {
-                showStatus(`✅ 预览已打开，找到 ${matchCount} 个匹配并应用了替换`);
+                showStatus(`✅ 内联预览已显示，找到 ${matchCount} 个匹配并应用了替换`);
             } else {
-                showStatus('⚠️ 预览已打开，但没有找到匹配的内容', false);
+                showStatus('⚠️ 内联预览已显示，但没有找到匹配的内容', false);
             }
 
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 预览AI结果失败:`, error);
             showStatus(`❌ 预览失败: ${error.message}`, true);
+        }
+    }
+
+    /**
+     * 显示内联预览
+     */
+    function showInlinePreview(aiGeneratedReplacement, originalText, fullResult) {
+        console.log(`[${EXTENSION_NAME}] 显示内联预览`);
+
+        // 查找或创建内联预览容器
+        let inlineContainer = document.getElementById('inline-preview-container');
+        if (!inlineContainer) {
+            // 创建内联预览容器
+            inlineContainer = createInlinePreviewContainer();
+        }
+
+        // 显示容器
+        inlineContainer.style.display = 'block';
+        inlineContainer.classList.add('active');
+
+        // 更新预览内容
+        updateInlinePreviewContent(inlineContainer, aiGeneratedReplacement, originalText, fullResult);
+
+        // 滚动到预览区域
+        setTimeout(() => {
+            inlineContainer.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'nearest' 
+            });
+        }, 100);
+
+        console.log(`[${EXTENSION_NAME}] 内联预览已显示`);
+    }
+
+    /**
+     * 创建内联预览容器
+     */
+    function createInlinePreviewContainer() {
+        console.log(`[${EXTENSION_NAME}] 创建内联预览容器`);
+
+        // 找到AI结果区域的父容器
+        const aiResultSection = document.querySelector('.ai-result-section');
+        if (!aiResultSection) {
+            console.error(`[${EXTENSION_NAME}] 找不到AI结果区域，无法创建内联预览`);
+            return null;
+        }
+
+        // 创建内联预览容器
+        const inlineContainer = document.createElement('div');
+        inlineContainer.id = 'inline-preview-container';
+        inlineContainer.className = 'inline-preview-container';
+        inlineContainer.style.display = 'none';
+
+        // 创建预览HTML结构
+        inlineContainer.innerHTML = `
+            <div class="inline-preview-header">
+                <h4>🎭 预览效果</h4>
+                <div class="inline-preview-controls">
+                    <button id="toggle-preview-mode" class="preview-control-btn" title="切换预览模式">
+                        📱 HTML渲染
+                    </button>
+                    <button id="close-inline-preview" class="preview-close-btn" title="关闭预览">
+                        ✕
+                    </button>
+                </div>
+            </div>
+            
+            <div class="inline-preview-content">
+                <!-- 渲染效果区域 -->
+                <div class="preview-render-section" id="preview-render-section">
+                    <div class="preview-mode-tabs">
+                        <button class="preview-tab active" data-mode="html">📱 HTML渲染</button>
+                        <button class="preview-tab" data-mode="text">📝 文本对比</button>
+                    </div>
+                    
+                    <!-- HTML渲染模式 -->
+                    <div class="preview-mode-content active" id="html-preview-mode">
+                        <div class="html-render-container" id="inline-html-render-container">
+                            <!-- HTML内容将动态插入这里 -->
+                        </div>
+                    </div>
+                    
+                    <!-- 文本对比模式 -->
+                    <div class="preview-mode-content" id="text-preview-mode">
+                        <div class="text-comparison-grid">
+                            <div class="before-column">
+                                <h5>🔍 应用前：</h5>
+                                <div class="text-display-container">
+                                    <pre class="text-display" id="before-text-display"></pre>
+                                </div>
+                            </div>
+                            <div class="after-column">
+                                <h5>✅ 应用后：</h5>
+                                <div class="text-display-container">
+                                    <pre class="text-display" id="after-text-display"></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // 将容器插入到AI结果区域之后
+        aiResultSection.parentNode.insertBefore(inlineContainer, aiResultSection.nextSibling);
+
+        // 绑定事件
+        bindInlinePreviewEvents(inlineContainer);
+
+        console.log(`[${EXTENSION_NAME}] 内联预览容器创建完成`);
+        return inlineContainer;
+    }
+
+    /**
+     * 绑定内联预览事件
+     */
+    function bindInlinePreviewEvents(container) {
+        // 关闭预览
+        const closeBtn = container.querySelector('#close-inline-preview');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                hideInlinePreview();
+            });
+        }
+
+        // 模式切换标签
+        const modeTabs = container.querySelectorAll('.preview-tab');
+        modeTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const mode = tab.dataset.mode;
+                switchPreviewMode(mode);
+            });
+        });
+
+        // 键盘事件
+        container.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                hideInlinePreview();
+            }
+        });
+
+        console.log(`[${EXTENSION_NAME}] 内联预览事件绑定完成`);
+    }
+
+    /**
+     * 更新内联预览内容
+     */
+    function updateInlinePreviewContent(container, aiGeneratedReplacement, originalText, fullResult) {
+        console.log(`[${EXTENSION_NAME}] 更新内联预览内容`);
+
+        // 更新HTML渲染内容
+        updateInlineHTMLPreview(container, aiGeneratedReplacement);
+
+        // 更新文本对比内容
+        updateInlineTextComparison(container, originalText, fullResult);
+    }
+
+    /**
+     * 更新内联HTML预览
+     */
+    function updateInlineHTMLPreview(container, aiGeneratedReplacement) {
+        const htmlContainer = container.querySelector('#inline-html-render-container');
+        if (!htmlContainer) return;
+
+        try {
+            if (aiGeneratedReplacement && aiGeneratedReplacement.trim()) {
+                // 清理AI生成的HTML内容
+                const cleanedHtml = cleanAIGeneratedHTML(aiGeneratedReplacement);
+                console.log(`[${EXTENSION_NAME}] 内联HTML内容已清理`);
+
+                // 使用iframe渲染完整HTML文档
+                renderHTMLInInlineIframe(htmlContainer, cleanedHtml);
+            } else {
+                htmlContainer.innerHTML = `
+                    <div class="no-html-content">
+                        <div class="no-content-message">
+                            <h3>📝 无HTML内容</h3>
+                            <p>没有找到AI生成的HTML美化内容</p>
+                        </div>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 内联HTML预览更新失败:`, error);
+            htmlContainer.innerHTML = `
+                <div class="error-content">
+                    <div class="error-message">
+                        <h3>⚠️ HTML渲染失败</h3>
+                        <p>AI生成的HTML内容无法正确渲染</p>
+                        <details>
+                            <summary>错误详情</summary>
+                            <pre>${escapeHtml(error.message)}</pre>
+                        </details>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    /**
+     * 在内联iframe中渲染HTML
+     */
+    function renderHTMLInInlineIframe(container, htmlContent) {
+        console.log(`[${EXTENSION_NAME}] 开始在内联iframe中渲染HTML`);
+
+        // 清空容器
+        container.innerHTML = '';
+
+        // 创建iframe元素
+        const iframe = document.createElement('iframe');
+        iframe.className = 'inline-preview-iframe';
+        iframe.style.width = '100%';
+        iframe.style.height = '400px';
+        iframe.style.border = 'none';
+        iframe.style.borderRadius = '8px';
+        iframe.style.backgroundColor = '#ffffff';
+
+        // 将iframe添加到容器
+        container.appendChild(iframe);
+
+        // 获取iframe的document对象
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+
+        // 写入HTML内容
+        iframeDoc.open();
+        iframeDoc.write(htmlContent);
+        iframeDoc.close();
+
+        // 监听iframe加载完成
+        iframe.onload = () => {
+            console.log(`[${EXTENSION_NAME}] 内联iframe HTML渲染完成`);
+
+            // 自动调整iframe高度以适应内容
+            try {
+                const iframeBody = iframe.contentDocument.body;
+                if (iframeBody) {
+                    const contentHeight = Math.max(
+                        iframeBody.scrollHeight,
+                        iframeBody.offsetHeight,
+                        iframe.contentDocument.documentElement.scrollHeight,
+                        iframe.contentDocument.documentElement.offsetHeight
+                    );
+
+                    // 设置合理的高度范围
+                    const finalHeight = Math.min(Math.max(contentHeight + 20, 200), 500);
+                    iframe.style.height = finalHeight + 'px';
+
+                    console.log(`[${EXTENSION_NAME}] 内联iframe高度调整为: ${finalHeight}px`);
+                }
+            } catch (error) {
+                console.warn(`[${EXTENSION_NAME}] 无法自动调整内联iframe高度:`, error);
+            }
+        };
+    }
+
+    /**
+     * 更新内联文本对比
+     */
+    function updateInlineTextComparison(container, originalText, fullResult) {
+        const beforeDisplay = container.querySelector('#before-text-display');
+        const afterDisplay = container.querySelector('#after-text-display');
+
+        if (beforeDisplay) {
+            beforeDisplay.textContent = originalText || '（无原始内容）';
+        }
+
+        if (afterDisplay) {
+            afterDisplay.textContent = fullResult || '（无结果内容）';
+        }
+    }
+
+    /**
+     * 切换预览模式
+     */
+    function switchPreviewMode(mode) {
+        console.log(`[${EXTENSION_NAME}] 切换预览模式到: ${mode}`);
+
+        const container = document.getElementById('inline-preview-container');
+        if (!container) return;
+
+        // 更新标签状态
+        const tabs = container.querySelectorAll('.preview-tab');
+        tabs.forEach(tab => {
+            if (tab.dataset.mode === mode) {
+                tab.classList.add('active');
+            } else {
+                tab.classList.remove('active');
+            }
+        });
+
+        // 更新内容显示
+        const contents = container.querySelectorAll('.preview-mode-content');
+        contents.forEach(content => {
+            if (content.id === `${mode}-preview-mode`) {
+                content.classList.add('active');
+                content.style.display = 'block';
+            } else {
+                content.classList.remove('active');
+                content.style.display = 'none';
+            }
+        });
+    }
+
+    /**
+     * 隐藏内联预览
+     */
+    function hideInlinePreview() {
+        console.log(`[${EXTENSION_NAME}] 隐藏内联预览`);
+
+        const container = document.getElementById('inline-preview-container');
+        if (container) {
+            container.style.display = 'none';
+            container.classList.remove('active');
         }
     }
 
@@ -1770,7 +2080,8 @@ AI助手：太好了！那我们准备一下就出发吧。`,
     }
 
     /**
-     * 打开预览效果弹窗
+     * 打开预览效果弹窗 - 保留旧版本以兼容其他地方的调用
+     * 注意：现在主要使用内联预览 showInlinePreview() 函数
      */
     function openPreviewPopup(stateBarContent, mainContent, originalText, fullResult) {
         console.log(`[${EXTENSION_NAME}] 预览弹窗数据:`, {
