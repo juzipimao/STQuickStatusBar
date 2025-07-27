@@ -85,15 +85,24 @@
          */
         addToHistory(userPrompt, aiResponse) {
             try {
+                console.log(`[${EXTENSION_NAME}] 尝试添加对话到历史`);
+                console.log(`[${EXTENSION_NAME}] enableConversationHistory:`, extensionSettings.enableConversationHistory);
+                console.log(`[${EXTENSION_NAME}] userPrompt 长度:`, userPrompt?.length);
+                console.log(`[${EXTENSION_NAME}] aiResponse 长度:`, aiResponse?.length);
+                
                 if (!extensionSettings.enableConversationHistory) {
+                    console.log(`[${EXTENSION_NAME}] 历史对话功能已禁用，跳过保存`);
                     return;
                 }
 
                 if (!userPrompt?.trim() || !aiResponse?.trim()) {
+                    console.warn(`[${EXTENSION_NAME}] 用户输入或AI回复为空，跳过保存`);
                     return;
                 }
 
                 const history = this.getHistory();
+                console.log(`[${EXTENSION_NAME}] 当前历史记录数量:`, history.length);
+                
                 const newEntry = {
                     id: Date.now(),
                     timestamp: new Date().toISOString(),
@@ -107,12 +116,21 @@
                 // 限制历史长度
                 if (history.length > this.maxHistory) {
                     history.splice(this.maxHistory);
+                    console.log(`[${EXTENSION_NAME}] 历史记录已截断到 ${this.maxHistory} 条`);
                 }
 
-                localStorage.setItem(this.storageKey, JSON.stringify(history));
+                // 保存到localStorage
+                const jsonString = JSON.stringify(history);
+                localStorage.setItem(this.storageKey, jsonString);
                 console.log(`[${EXTENSION_NAME}] 对话已添加到历史，当前历史长度: ${history.length}`);
+                console.log(`[${EXTENSION_NAME}] 保存的JSON长度:`, jsonString.length);
+                
+                // 触发UI更新
+                this.updateHistoryDisplay();
+                
             } catch (error) {
                 console.error(`[${EXTENSION_NAME}] 添加历史对话失败:`, error);
+                console.error(`[${EXTENSION_NAME}] 错误堆栈:`, error.stack);
             }
         }
 
@@ -190,6 +208,50 @@
             if (history.length > newMax) {
                 history.splice(newMax);
                 localStorage.setItem(this.storageKey, JSON.stringify(history));
+            }
+        }
+
+        /**
+         * 更新历史记录显示（UI更新）
+         */
+        updateHistoryDisplay() {
+            try {
+                console.log(`[${EXTENSION_NAME}] 更新历史记录显示`);
+                
+                // 获取当前历史记录数量
+                const history = this.getHistory();
+                const historyCount = history.length;
+                console.log(`[${EXTENSION_NAME}] 当前历史记录数量: ${historyCount}`);
+                
+                // 更新历史计数显示
+                const historyCountElements = document.querySelectorAll('.history-count');
+                historyCountElements.forEach(element => {
+                    element.textContent = `历史对话: ${historyCount}条`;
+                    console.log(`[${EXTENSION_NAME}] 已更新历史计数显示元素`);
+                });
+                
+                // 如果AI提示输入框存在且历史记录不为空，更新输入框内容
+                const aiPromptElement = document.getElementById('ai-prompt');
+                if (aiPromptElement && historyCount > 0) {
+                    const latestInput = this.getLatestUserInput();
+                    if (latestInput && aiPromptElement.value !== latestInput) {
+                        aiPromptElement.value = latestInput;
+                        console.log(`[${EXTENSION_NAME}] 已更新AI提示输入框内容`);
+                    }
+                }
+                
+                // 触发自定义事件，通知其他组件历史记录已更新
+                if (typeof window !== 'undefined' && window.dispatchEvent) {
+                    const event = new CustomEvent('STQuickStatusBar:historyUpdated', {
+                        detail: { count: historyCount }
+                    });
+                    window.dispatchEvent(event);
+                    console.log(`[${EXTENSION_NAME}] 已触发历史更新事件`);
+                }
+                
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 更新历史记录显示失败:`, error);
+                console.error(`[${EXTENSION_NAME}] 错误堆栈:`, error.stack);
             }
         }
     }
@@ -318,30 +380,93 @@
     }
 
     /**
-     * 获取当前选择的角色信息
+     * 获取当前选择的角色信息（增强版本，支持多种获取方式）
      */
     function getCurrentCharacterInfo() {
         try {
-            const context = getContext();
-            const characterId = context.characterId;
-
-            if (characterId === undefined || characterId === null) {
-                return null;
+            console.log(`[${EXTENSION_NAME}] 开始获取角色信息`);
+            console.log(`[${EXTENSION_NAME}] this_chid 值:`, this_chid);
+            console.log(`[${EXTENSION_NAME}] characters 数组长度:`, characters?.length);
+            
+            // 方法1：优先使用 this_chid (最可靠的方式)
+            if (this_chid !== undefined && this_chid !== null && 
+                characters && Array.isArray(characters) && characters[this_chid]) {
+                const character = characters[this_chid];
+                console.log(`[${EXTENSION_NAME}] 通过 this_chid 获取角色成功:`, character.name);
+                return {
+                    id: this_chid,
+                    name: character.name || '未知角色',
+                    avatar: character.avatar || '',
+                    description: character.description || ''
+                };
             }
-
-            const character = characters[characterId];
-            if (!character) {
-                return null;
+            
+            // 方法2：尝试通过 context 获取
+            if (typeof getContext === 'function') {
+                const context = getContext();
+                console.log(`[${EXTENSION_NAME}] context 内容:`, context);
+                
+                if (context && context.characterId !== undefined) {
+                    // 2a. 尝试直接作为数组索引访问
+                    if (characters && characters[context.characterId]) {
+                        const character = characters[context.characterId];
+                        console.log(`[${EXTENSION_NAME}] 通过 context.characterId 直接获取角色成功`);
+                        return {
+                            id: context.characterId,
+                            name: character.name || '未知角色',
+                            avatar: character.avatar || '',
+                            description: character.description || ''
+                        };
+                    }
+                    
+                    // 2b. 尝试查找匹配的角色
+                    if (characters && Array.isArray(characters)) {
+                        const foundIndex = characters.findIndex(char => 
+                            char && (
+                                char.avatar === context.characterId || 
+                                char.name === context.characterId ||
+                                char.id === context.characterId
+                            )
+                        );
+                        
+                        if (foundIndex !== -1) {
+                            const foundCharacter = characters[foundIndex];
+                            console.log(`[${EXTENSION_NAME}] 通过查找获取角色成功:`, foundCharacter.name);
+                            return {
+                                id: foundIndex,
+                                name: foundCharacter.name || '未知角色',
+                                avatar: foundCharacter.avatar || '',
+                                description: foundCharacter.description || ''
+                            };
+                        }
+                    }
+                }
             }
-
-            return {
-                id: characterId,
-                name: character.name || '未知角色',
-                avatar: character.avatar || '',
-                description: character.description || ''
-            };
+            
+            // 方法3：检查是否有任何已选择的角色
+            if (characters && Array.isArray(characters) && characters.length > 0) {
+                // 查找第一个有效的角色作为回退
+                for (let i = 0; i < characters.length; i++) {
+                    if (characters[i] && characters[i].name) {
+                        console.log(`[${EXTENSION_NAME}] 使用第一个有效角色作为回退:`, characters[i].name);
+                        console.warn(`[${EXTENSION_NAME}] 注意：这是回退方案，可能不是当前选择的角色`);
+                        return {
+                            id: i,
+                            name: characters[i].name,
+                            avatar: characters[i].avatar || '',
+                            description: characters[i].description || ''
+                        };
+                    }
+                }
+            }
+            
+            console.warn(`[${EXTENSION_NAME}] 所有方法都无法获取角色信息`);
+            console.log(`[${EXTENSION_NAME}] 调试信息 - this_chid:`, this_chid, 'characters:', characters);
+            return null;
+            
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 获取角色信息失败:`, error);
+            console.error(`[${EXTENSION_NAME}] 错误堆栈:`, error.stack);
             return null;
         }
     }
@@ -565,17 +690,17 @@
     }
 
     /**
-     * 创建模态框HTML内容
+     * 创建快速正则工具区域HTML内容
      */
-    function createModalContent(characterInfo) {
-        console.log(`[${EXTENSION_NAME}] 创建模态框内容，内容长度检查开始`);
+    function createQuickRegexToolsContent(characterInfo) {
+        console.log(`[${EXTENSION_NAME}] 创建快速正则工具内容`);
         const isMobile = isMobileDevice();
         console.log(`[${EXTENSION_NAME}] 设备类型: ${isMobile ? '移动设备' : '桌面设备'}`);
         
-        const modalContent = `
-            <div id="quick-regex-modal" class="quick-regex-container">
+        const toolsContent = `
+            <div id="quick-regex-tools" class="quick-regex-container">
                 <div class="quick-regex-header">
-                    <h3>📝 ${EXTENSION_DISPLAY_NAME}</h3>
+                    <h4>🛠️ 快速正则工具</h4>
                     ${characterInfo ? `
                         <div class="character-info">
                             <img src="/characters/${characterInfo.avatar}" alt="${characterInfo.name}" class="character-avatar">
@@ -648,6 +773,12 @@
                                 <div id="preview-result" class="preview-result"></div>
                             </div>
                         ` : ''}
+
+                        <div class="form-group">
+                            <button id="insert-regex-btn" class="ai-apply-btn">
+                                ✅ 插入正则表达式
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -791,11 +922,9 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
             </div>
         `;
         
-        console.log(`[${EXTENSION_NAME}] 模态框内容创建完成，总长度: ${modalContent.length}`);
-        console.log(`[${EXTENSION_NAME}] 包含标签按钮: ${modalContent.includes('tab-button') ? '是' : '否'}`);
-        console.log(`[${EXTENSION_NAME}] 移动端标记: ${modalContent.includes('data-mobile') ? '是' : '否'}`);
+        console.log(`[${EXTENSION_NAME}] 快速正则工具内容创建完成，总长度: ${toolsContent.length}`);
         
-        return modalContent;
+        return toolsContent;
     }
 
     /**
@@ -2381,11 +2510,8 @@ ${bodyMatch[1]}
                         conversationHistory.clearHistory();
                         showStatus('✅ 对话历史已清空');
 
-                        // 更新历史计数显示
-                        const historyCount = document.querySelector('.history-count');
-                        if (historyCount) {
-                            historyCount.textContent = `历史对话: 0条`;
-                        }
+                        // 触发历史显示更新
+                        conversationHistory.updateHistoryDisplay();
 
                         // 清空AI提示输入框
                         const aiPrompt = document.getElementById('ai-prompt');
@@ -2408,214 +2534,6 @@ ${bodyMatch[1]}
     function isMobileDevice() {
         return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
                window.innerWidth <= 768;
-    }
-
-    /**
-     * 绑定模态框事件
-     */
-    function bindModalEvents() {
-        console.log(`[${EXTENSION_NAME}] 开始绑定模态框事件`);
-
-        // === 页面切换事件 ===
-        const tabButtons = document.querySelectorAll('.tab-button');
-        const isMobile = isMobileDevice();
-        console.log(`[${EXTENSION_NAME}] 检测到设备类型: ${isMobile ? '移动设备' : '桌面设备'}`);
-        console.log(`[${EXTENSION_NAME}] 找到 ${tabButtons.length} 个标签按钮`);
-
-        tabButtons.forEach((button, index) => {
-            const pageId = button.getAttribute('data-page');
-            const isMobileButton = button.getAttribute('data-mobile') === 'true';
-            console.log(`[${EXTENSION_NAME}] 绑定第${index + 1}个标签按钮: ${pageId}, 移动标记: ${isMobileButton}`);
-
-            if (isMobile) {
-                // 移动设备：优先使用触摸事件，同时保留点击事件作为后备
-                let touchStarted = false;
-                let touchStartTime = 0;
-
-                // 触摸开始
-                button.addEventListener('touchstart', (e) => {
-                    console.log(`[${EXTENSION_NAME}] 移动端触摸开始: ${pageId}`);
-                    touchStarted = true;
-                    touchStartTime = Date.now();
-                    
-                    // 添加视觉反馈
-                    button.style.transform = 'scale(0.95)';
-                    button.style.backgroundColor = 'var(--st-accent-blue, #4299e1)';
-                    
-                    e.preventDefault(); // 防止触发点击事件
-                }, { passive: false });
-
-                // 触摸结束
-                button.addEventListener('touchend', (e) => {
-                    console.log(`[${EXTENSION_NAME}] 移动端触摸结束: ${pageId}`);
-                    
-                    // 恢复视觉效果
-                    button.style.transform = '';
-                    button.style.backgroundColor = '';
-                    
-                    if (touchStarted) {
-                        const touchDuration = Date.now() - touchStartTime;
-                        console.log(`[${EXTENSION_NAME}] 触摸持续时间: ${touchDuration}ms`);
-                        
-                        // 只有在短按(小于500ms)情况下才处理为点击
-                        if (touchDuration < 500 && pageId) {
-                            console.log(`[${EXTENSION_NAME}] 通过触摸切换到页面: ${pageId}`);
-                            
-                            // 延迟执行，确保视觉反馈完成
-                            setTimeout(() => {
-                                switchToPage(pageId);
-                            }, 50);
-                        }
-                        
-                        touchStarted = false;
-                        e.preventDefault(); // 防止触发点击事件
-                    }
-                }, { passive: false });
-
-                // 触摸取消
-                button.addEventListener('touchcancel', () => {
-                    console.log(`[${EXTENSION_NAME}] 移动端触摸取消: ${pageId}`);
-                    touchStarted = false;
-                    
-                    // 恢复视觉效果
-                    button.style.transform = '';
-                    button.style.backgroundColor = '';
-                });
-
-                // 添加点击事件作为后备（对于某些移动浏览器）
-                button.addEventListener('click', (e) => {
-                    console.log(`[${EXTENSION_NAME}] 移动端点击后备触发: ${pageId}, touchStarted: ${touchStarted}`);
-                    
-                    if (!touchStarted && pageId) { // 只有在没有触摸事件时才处理点击
-                        console.log(`[${EXTENSION_NAME}] 移动端点击后备切换: ${pageId}`);
-                        switchToPage(pageId);
-                    }
-                    e.preventDefault();
-                });
-                
-            } else {
-                // 桌面设备：使用标准点击事件
-                button.addEventListener('click', (e) => {
-                    console.log(`[${EXTENSION_NAME}] 桌面端点击切换到页面: ${pageId}`);
-                    if (pageId) {
-                        switchToPage(pageId);
-                    }
-                    e.preventDefault();
-                });
-            }
-        });
-
-        // === AI页面事件 ===
-        // API提供商切换
-        const providerSelect = document.getElementById('ai-provider');
-        if (providerSelect) {
-            providerSelect.addEventListener('change', () => {
-                const provider = providerSelect.value;
-                const geminiConfig = document.getElementById('gemini-config');
-                const customConfig = document.getElementById('custom-config');
-
-                if (provider === 'gemini') {
-                    if (geminiConfig) geminiConfig.style.display = 'block';
-                    if (customConfig) customConfig.style.display = 'none';
-                } else if (provider === 'custom') {
-                    if (geminiConfig) geminiConfig.style.display = 'none';
-                    if (customConfig) customConfig.style.display = 'block';
-                }
-
-                // 保存设置
-                saveAISettings();
-            });
-        }
-
-        // AI生成按钮
-        const generateBtn = document.getElementById('generate-regex');
-        if (generateBtn) {
-            generateBtn.addEventListener('click', handleAIGenerate);
-        }
-
-        // 应用AI结果按钮
-        const applyBtn = document.getElementById('apply-ai-result');
-        if (applyBtn) {
-            applyBtn.addEventListener('click', applyAIResult);
-        }
-
-        // 预览AI结果按钮
-        const previewBtn = document.getElementById('preview-ai-result');
-        if (previewBtn) {
-            previewBtn.addEventListener('click', previewAIResult);
-        }
-
-        // 查看对话历史按钮
-        const viewHistoryBtn = document.getElementById('view-conversation-history');
-        if (viewHistoryBtn) {
-            viewHistoryBtn.addEventListener('click', showConversationHistory);
-        }
-
-        // 清空对话历史按钮
-        const clearHistoryBtn = document.getElementById('clear-conversation-history');
-        if (clearHistoryBtn) {
-            clearHistoryBtn.addEventListener('click', clearConversationHistory);
-        }
-
-        // AI配置字段自动保存（实时保存）
-        const aiConfigFields = [
-            'ai-provider', 'gemini-api-key', 'gemini-model',
-            'custom-api-url', 'custom-api-key', 'custom-model'
-        ];
-
-        aiConfigFields.forEach(fieldId => {
-            const field = document.getElementById(fieldId);
-            if (field) {
-                // 添加实时保存监听器
-                field.addEventListener('input', autoSaveAPIConfig);
-                field.addEventListener('change', autoSaveAPIConfig);
-                field.addEventListener('blur', autoSaveAPIConfig);
-                console.log(`[${EXTENSION_NAME}] 为字段 ${fieldId} 添加了自动保存监听器`);
-            }
-        });
-
-        // === 手动创建页面事件 ===
-        // 实时验证正则表达式
-        const patternInput = document.getElementById('regex-pattern');
-        const flagsSelect = document.getElementById('regex-flags');
-
-        if (patternInput && extensionSettings.autoValidate) {
-            patternInput.addEventListener('input', () => {
-                const pattern = patternInput.value;
-                const flags = flagsSelect?.value || 'g';
-                updateValidation(pattern, flags);
-                updatePreview();
-            });
-        }
-
-        if (flagsSelect) {
-            flagsSelect.addEventListener('change', () => {
-                const pattern = patternInput?.value || '';
-                const flags = flagsSelect.value;
-                updateValidation(pattern, flags);
-                updatePreview();
-            });
-        }
-
-        // 实时预览
-        if (extensionSettings.showPreview) {
-            const testTextArea = document.getElementById('test-text');
-            const replacementArea = document.getElementById('regex-replacement');
-
-            [testTextArea, replacementArea].forEach(element => {
-                if (element) {
-                    element.addEventListener('input', updatePreview);
-                }
-            });
-        }
-
-        // 初始验证
-        if (patternInput?.value) {
-            updateValidation(patternInput.value, flagsSelect?.value || 'g');
-            updatePreview();
-        }
-
-        console.log(`[${EXTENSION_NAME}] 模态框事件绑定完成`);
     }
 
     /**
@@ -2715,231 +2633,381 @@ ${bodyMatch[1]}
     }
 
     /**
-     * 打开快速正则工具模态框
+     * 切换抽屉展开/收起状态
      */
-    async function openQuickRegexModal() {
-        console.log(`[${EXTENSION_NAME}] openQuickRegexModal 被调用`);
-
-        // 用于存储表单数据的变量
-        let formData = null;
-
-        try {
-            // 1. 检查弹窗模块
-            console.log(`[${EXTENSION_NAME}] 检查弹窗模块可用性`);
-            if (!callGenericPopup) {
-                console.error(`[${EXTENSION_NAME}] callGenericPopup 不可用`);
-                throw new Error('弹窗模块未加载');
-            }
-            console.log(`[${EXTENSION_NAME}] callGenericPopup 可用`);
-
-            // 2. 获取角色信息
-            console.log(`[${EXTENSION_NAME}] 获取当前角色信息`);
-            const characterInfo = getCurrentCharacterInfo();
-            console.log(`[${EXTENSION_NAME}] 角色信息:`, characterInfo);
-
-            // 3. 创建模态框内容
-            console.log(`[${EXTENSION_NAME}] 创建模态框内容`);
-            const modalContent = createModalContent(characterInfo);
-            console.log(`[${EXTENSION_NAME}] 模态框内容长度:`, modalContent.length);
-
-            // 4. 调用弹窗
-            console.log(`[${EXTENSION_NAME}] 调用 callGenericPopup`);
-            const result = await callGenericPopup(modalContent, POPUP_TYPE.TEXT, '', {
-                wide: true,
-                okButton: '插入正则表达式',
-                cancelButton: '取消',
-                customButtons: extensionSettings.showPreview ? [{
-                    text: '测试正则',
-                    action: () => {
-                        console.log(`[${EXTENSION_NAME}] 测试正则按钮被点击`);
-                        updatePreview();
-                    }
-                }] : [],
-                onOpen: () => {
-                    console.log(`[${EXTENSION_NAME}] 模态框已打开`);
-
-                    // 延迟绑定事件，确保DOM已完全渲染
-                    setTimeout(() => {
-                        console.log(`[${EXTENSION_NAME}] 开始绑定模态框事件`);
-
-                        // 检查模态框DOM结构
-                        console.log(`[${EXTENSION_NAME}] 检查模态框DOM结构`);
-                        const modalContainer = document.querySelector('#quick-regex-modal');
-                        console.log(`[${EXTENSION_NAME}] 模态框容器:`, modalContainer ? '找到' : '未找到');
-
-                        if (modalContainer) {
-                            const allInputs = modalContainer.querySelectorAll('input, select, textarea');
-                            console.log(`[${EXTENSION_NAME}] 模态框中找到 ${allInputs.length} 个表单元素`);
-                            allInputs.forEach((element, index) => {
-                                console.log(`[${EXTENSION_NAME}] 元素${index + 1}:`, {
-                                    tagName: element.tagName,
-                                    id: element.id,
-                                    type: element.type,
-                                    value: element.value
-                                });
-                            });
-                        } else {
-                            // 如果找不到模态框容器，尝试查找整个文档中的表单元素
-                            console.log(`[${EXTENSION_NAME}] 在整个文档中查找表单元素`);
-                            const scriptNameEl = document.getElementById('regex-script-name');
-                            const patternEl = document.getElementById('regex-pattern');
-                            console.log(`[${EXTENSION_NAME}] 文档中的元素检查:`, {
-                                scriptNameEl: scriptNameEl ? '存在' : '不存在',
-                                patternEl: patternEl ? '存在' : '不存在'
-                            });
-                        }
-
-                        bindModalEvents();
-                    }, 100);
-                },
-                onClosing: (popup) => {
-                    console.log(`[${EXTENSION_NAME}] 模态框即将关闭，获取表单数据`);
-
-                    // 在模态框关闭前获取表单数据
-                    try {
-                        const scriptNameElement = document.getElementById('regex-script-name');
-                        const patternElement = document.getElementById('regex-pattern');
-                        const replacementElement = document.getElementById('regex-replacement');
-                        const flagsElement = document.getElementById('regex-flags');
-                        const affectsElement = document.getElementById('regex-affects');
-
-                        if (scriptNameElement && patternElement) {
-                            formData = {
-                                scriptName: scriptNameElement.value, // 不做trim，保持原始内容
-                                pattern: patternElement.value, // 不做trim，保持原始内容
-                                replacement: replacementElement?.value || '',
-                                flags: flagsElement?.value || 'g',
-                                affects: affectsElement?.value || 'both'
-                            };
-
-                            console.log(`[${EXTENSION_NAME}] 成功获取表单数据:`, {
-                                scriptName: `"${formData.scriptName}"`,
-                                pattern: `"${formData.pattern}"`,
-                                replacement: `"${formData.replacement}"`,
-                                patternLength: formData.pattern?.length,
-                                replacementLength: formData.replacement?.length,
-                                patternHasNewlines: formData.pattern?.includes('\n'),
-                                replacementHasNewlines: formData.replacement?.includes('\n'),
-                                replacementPreview: formData.replacement?.substring(0, 200) + '...'
-                            });
-                        } else {
-                            console.warn(`[${EXTENSION_NAME}] 无法获取表单数据，元素不存在`);
-                            formData = null;
-                        }
-                    } catch (error) {
-                        console.error(`[${EXTENSION_NAME}] 获取表单数据时出错:`, error);
-                        formData = null;
-                    }
-
-                    return true; // 允许模态框关闭
-                }
-            });
-
-            // 5. 处理结果
-            console.log(`[${EXTENSION_NAME}] 模态框返回结果:`, result);
-            console.log(`[${EXTENSION_NAME}] POPUP_RESULT.AFFIRMATIVE:`, POPUP_RESULT.AFFIRMATIVE);
-            console.log(`[${EXTENSION_NAME}] 获取的表单数据:`, formData);
-
-            if (result === POPUP_RESULT.AFFIRMATIVE && formData) {
-                console.log(`[${EXTENSION_NAME}] 用户点击了确认按钮，开始处理插入正则`);
-                const success = await handleInsertRegexWithData(formData, characterInfo);
-                console.log(`[${EXTENSION_NAME}] handleInsertRegexWithData 返回结果:`, success);
-                if (success) {
-                    console.log(`[${EXTENSION_NAME}] 正则表达式插入成功`);
-                }
-            } else if (result === POPUP_RESULT.AFFIRMATIVE && !formData) {
-                console.error(`[${EXTENSION_NAME}] 用户确认但表单数据为空`);
-                if (toastr) {
-                    toastr.error('无法获取表单数据，请重试', '错误');
-                }
-            } else {
-                console.log(`[${EXTENSION_NAME}] 用户取消或关闭了模态框`);
-            }
-
-        } catch (error) {
-            console.error(`[${EXTENSION_NAME}] 打开模态框失败:`, error);
-            console.error(`[${EXTENSION_NAME}] 错误堆栈:`, error.stack);
-            if (toastr) {
-                toastr.error(`无法打开正则工具: ${error.message}`, '错误');
-            }
+    function toggleDrawer(element) {
+        const drawer = element.parentElement;
+        const content = drawer.querySelector('.inline-drawer-content');
+        const icon = drawer.querySelector('.inline-drawer-icon');
+        
+        if (drawer.classList.contains('closed')) {
+            drawer.classList.remove('closed');
+            content.style.display = 'block';
+            icon.textContent = '🔽';
+        } else {
+            drawer.classList.add('closed');
+            content.style.display = 'none';
+            icon.textContent = '▶️';
         }
     }
+    
+    // 将toggleDrawer函数暴露到全局作用域，以便HTML onclick可以访问
+    window.toggleDrawer = toggleDrawer;
 
     /**
-     * 创建扩展的用户界面
+     * 创建用户界面
      */
     function createUI() {
+        console.log(`[${EXTENSION_NAME}] 创建用户界面`);
+        
+        // 创建设置面板HTML
         const settingsHtml = `
-            <div id="${EXTENSION_NAME}-settings" class="extension-settings">
-                <h3>${EXTENSION_DISPLAY_NAME}</h3>
+            <div id="${EXTENSION_NAME}-settings">
                 <div class="inline-drawer">
-                    <div class="inline-drawer-toggle inline-drawer-header">
-                        <b>工具设置</b>
-                        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                    <div class="inline-drawer-header" onclick="toggleDrawer(this)">
+                        <h3>ST快速状态栏 - 正则表达式工具</h3>
+                        <span class="inline-drawer-icon">🔽</span>
                     </div>
                     <div class="inline-drawer-content">
-                        <label class="checkbox_label">
-                            <input id="${EXTENSION_NAME}-enabled" type="checkbox" ${extensionSettings.enabled ? 'checked' : ''}>
-                            <span>启用扩展</span>
-                        </label>
-                        <br>
-                        <label class="checkbox_label">
-                            <input id="${EXTENSION_NAME}-preview" type="checkbox" ${extensionSettings.showPreview ? 'checked' : ''}>
-                            <span>显示预览功能</span>
-                        </label>
-                        <br>
-                        <label class="checkbox_label">
-                            <input id="${EXTENSION_NAME}-remember" type="checkbox" ${extensionSettings.rememberLastValues ? 'checked' : ''}>
-                            <span>记住上次的输入</span>
-                        </label>
-                        <br>
-                        <div class="quick-regex-action">
-                            <button id="${EXTENSION_NAME}-open-tool" class="menu_button"
-                                    ${!extensionSettings.enabled ? 'disabled' : ''}>
-                                <i class="fa-solid fa-magic"></i>
-                                <span>打开快速正则工具</span>
-                            </button>
+                        <!-- 快速正则工具区域 -->
+                        <div id="quick-regex-tools-container"></div>
+                        
+                        <!-- 基础设置 -->
+                        <div class="marginBot5">
+                            <label class="checkbox_label" for="STQuickStatusBar-enabled">
+                                <input type="checkbox" id="STQuickStatusBar-enabled">
+                                启用快速状态栏工具
+                            </label>
                         </div>
-                        <br>
-                        <small class="notes">点击上方按钮打开模态框，快速为当前角色添加正则表达式规则。</small>
+                        
+                        <div class="marginBot5">
+                            <label class="checkbox_label" for="STQuickStatusBar-showPreview">
+                                <input type="checkbox" id="STQuickStatusBar-showPreview">
+                                显示测试预览功能
+                            </label>
+                        </div>
+                        
+                        <div class="marginBot5">
+                            <label class="checkbox_label" for="STQuickStatusBar-rememberValues">
+                                <input type="checkbox" id="STQuickStatusBar-rememberValues">
+                                记住上次的输入值
+                            </label>
+                        </div>
+                        
+                        <small class="notes">
+                            💡 提示：此扩展提供快速为当前角色添加正则表达式规则的功能，支持手动创建和AI生成两种模式。
+                        </small>
                     </div>
                 </div>
             </div>
         `;
-
+        
+        // 将设置面板添加到扩展设置页面
         $('#extensions_settings').append(settingsHtml);
-
-        // 绑定设置事件
-        $(`#${EXTENSION_NAME}-enabled`).on('change', function() {
-            extensionSettings.enabled = $(this).prop('checked');
+        
+        // 绑定设置项事件
+        $('#STQuickStatusBar-enabled').prop('checked', extensionSettings.enabled).on('change', function() {
+            extensionSettings.enabled = this.checked;
+            updateUIState();
             saveSettings();
-
-            const button = $(`#${EXTENSION_NAME}-open-tool`);
-            if (extensionSettings.enabled) {
-                button.prop('disabled', false);
+        });
+        
+        $('#STQuickStatusBar-showPreview').prop('checked', extensionSettings.showPreview).on('change', function() {
+            extensionSettings.showPreview = this.checked;
+            saveSettings();
+        });
+        
+        $('#STQuickStatusBar-rememberValues').prop('checked', extensionSettings.rememberLastValues).on('change', function() {
+            extensionSettings.rememberLastValues = this.checked;
+            saveSettings();
+        });
+        
+        // 初始化UI状态
+        updateUIState();
+        
+        // 初始化快速正则工具
+        initializeQuickRegexTools();
+        
+        console.log(`[${EXTENSION_NAME}] 用户界面创建完成`);
+    }
+    
+    /**
+     * 更新UI状态
+     */
+    function updateUIState() {
+        const isEnabled = extensionSettings.enabled;
+        
+        // 更新工具区域的可见性
+        const toolsContainer = document.getElementById('quick-regex-tools-container');
+        if (toolsContainer) {
+            if (isEnabled) {
+                refreshQuickRegexTools();
             } else {
-                button.prop('disabled', true);
+                toolsContainer.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--SmartThemeQuoteColor);">扩展已禁用</div>';
+            }
+        }
+        
+        console.log(`[${EXTENSION_NAME}] UI状态已更新，扩展状态: ${isEnabled ? '启用' : '禁用'}`);
+    }
+    
+    /**
+     * 初始化快速正则工具
+     */
+    function initializeQuickRegexTools() {
+        console.log(`[${EXTENSION_NAME}] 初始化快速正则工具`);
+        
+        if (!extensionSettings.enabled) {
+            console.log(`[${EXTENSION_NAME}] 扩展未启用，跳过工具初始化`);
+            return;
+        }
+        
+        refreshQuickRegexTools();
+    }
+    
+    /**
+     * 刷新快速正则工具内容
+     */
+    function refreshQuickRegexTools() {
+        console.log(`[${EXTENSION_NAME}] 刷新快速正则工具`);
+        
+        const toolsContainer = document.getElementById('quick-regex-tools-container');
+        if (!toolsContainer) {
+            console.error(`[${EXTENSION_NAME}] 找不到工具容器元素`);
+            return;
+        }
+        
+        // 获取当前角色信息
+        const characterInfo = getCurrentCharacterInfo();
+        
+        // 创建工具内容
+        const toolsContent = createQuickRegexToolsContent(characterInfo);
+        
+        // 更新容器内容
+        toolsContainer.innerHTML = toolsContent;
+        
+        // 绑定事件
+        bindQuickRegexToolsEvents();
+        
+        // 更新历史记录显示
+        setTimeout(() => {
+            conversationHistory.updateHistoryDisplay();
+        }, 100);
+        
+        console.log(`[${EXTENSION_NAME}] 快速正则工具内容已刷新`);
+    }
+    
+    /**
+     * 调试角色状态 - 帮助诊断角色检测问题
+     */
+    function debugCharacterState() {
+        console.log(`[${EXTENSION_NAME}] === 角色状态调试信息 ===`);
+        console.log(`this_chid:`, this_chid);
+        console.log(`this_chid 类型:`, typeof this_chid);
+        console.log(`characters 数组:`, characters);
+        console.log(`characters 长度:`, characters?.length);
+        console.log(`characters 是否为数组:`, Array.isArray(characters));
+        
+        if (typeof getContext === 'function') {
+            try {
+                const context = getContext();
+                console.log(`getContext() 结果:`, context);
+                console.log(`context.characterId:`, context.characterId);
+                console.log(`context.characterId 类型:`, typeof context.characterId);
+            } catch (error) {
+                console.error(`调用 getContext() 失败:`, error);
+            }
+        } else {
+            console.warn(`getContext 函数不可用`);
+        }
+        
+        // 检查当前选择的角色
+        if (this_chid !== undefined && this_chid !== null && characters && characters[this_chid]) {
+            console.log(`当前角色 (通过 this_chid):`, characters[this_chid]);
+            console.log(`角色名称:`, characters[this_chid].name);
+            console.log(`角色头像:`, characters[this_chid].avatar);
+        } else {
+            console.warn(`无法通过 this_chid 获取角色`);
+            
+            // 尝试显示所有可用角色
+            if (characters && Array.isArray(characters)) {
+                console.log(`所有可用角色:`, characters.map((char, index) => ({
+                    index,
+                    name: char?.name,
+                    avatar: char?.avatar
+                })));
+            }
+        }
+        
+        console.log(`[${EXTENSION_NAME}] === 调试信息结束 ===`);
+    }
+
+    /**
+     * 更新角色信息显示
+     */
+    function updateCharacterInfoDisplay() {
+        console.log(`[${EXTENSION_NAME}] 更新角色信息显示`);
+        
+        // 调试输出
+        debugCharacterState();
+        
+        // 如果工具已初始化，刷新内容
+        const toolsContainer = document.getElementById('quick-regex-tools-container');
+        if (toolsContainer && extensionSettings.enabled) {
+            console.log(`[${EXTENSION_NAME}] 工具容器存在，开始刷新内容`);
+            
+            // 获取角色信息并记录
+            const characterInfo = getCurrentCharacterInfo();
+            console.log(`[${EXTENSION_NAME}] 获取到的角色信息:`, characterInfo);
+            
+            if (characterInfo) {
+                console.log(`[${EXTENSION_NAME}] 角色检测成功 - ${characterInfo.name}`);
+            } else {
+                console.warn(`[${EXTENSION_NAME}] 角色检测失败 - 无角色信息`);
+            }
+            
+            refreshQuickRegexTools();
+        } else {
+            console.log(`[${EXTENSION_NAME}] 工具容器不存在或扩展未启用`);
+        }
+    }
+    
+    /**
+     * 绑定快速正则工具事件
+     */
+    function bindQuickRegexToolsEvents() {
+        console.log(`[${EXTENSION_NAME}] 绑定快速正则工具事件`);
+        
+        // 页面切换事件
+        $(document).off('click', '#quick-regex-tools .tab-button').on('click', '#quick-regex-tools .tab-button', function() {
+            const pageId = $(this).data('page');
+            switchToPage(pageId);
+        });
+        
+        // 表单验证事件
+        $(document).off('input', '#regex-pattern, #regex-flags').on('input', '#regex-pattern, #regex-flags', function() {
+            if (extensionSettings.autoValidate) {
+                const pattern = $('#regex-pattern').val() || '';
+                const flags = $('#regex-flags').val() || 'g';
+                updateValidation(pattern, flags);
+                if (extensionSettings.showPreview) {
+                    updatePreview();
+                }
             }
         });
-
-        $(`#${EXTENSION_NAME}-preview`).on('change', function() {
-            extensionSettings.showPreview = $(this).prop('checked');
-            saveSettings();
-        });
-
-        $(`#${EXTENSION_NAME}-remember`).on('change', function() {
-            extensionSettings.rememberLastValues = $(this).prop('checked');
-            saveSettings();
-        });
-
-        // 绑定工具按钮事件
-        $(`#${EXTENSION_NAME}-open-tool`).on('click', function() {
-            if (extensionSettings.enabled) {
-                openQuickRegexModal();
+        
+        // 测试文本变化事件
+        $(document).off('input', '#test-text').on('input', '#test-text', function() {
+            if (extensionSettings.showPreview) {
+                updatePreview();
             }
         });
-
-        console.log(`[${EXTENSION_NAME}] UI 已创建`);
+        
+        // 插入正则表达式按钮
+        $(document).off('click', '#insert-regex-btn').on('click', '#insert-regex-btn', function() {
+            handleInsertRegex();
+        });
+        
+        // AI相关事件
+        bindAIEvents();
+        
+        console.log(`[${EXTENSION_NAME}] 事件绑定完成`);
+    }
+    
+    /**
+     * 绑定AI相关事件
+     */
+    function bindAIEvents() {
+        // API提供商切换
+        $(document).off('change', '#ai-provider').on('change', '#ai-provider', function() {
+            const provider = $(this).val();
+            switchAPIProvider(provider);
+            autoSaveAPIConfig();
+        });
+        
+        // API配置自动保存
+        const apiConfigSelectors = '#gemini-api-key, #gemini-model, #custom-api-url, #custom-api-key, #custom-model';
+        $(document).off('input change', apiConfigSelectors).on('input change', apiConfigSelectors, function() {
+            autoSaveAPIConfig();
+        });
+        
+        // AI生成按钮
+        $(document).off('click', '#generate-regex').on('click', '#generate-regex', function() {
+            handleAIGenerate();
+        });
+        
+        // 预览AI结果
+        $(document).off('click', '#preview-ai-result').on('click', '#preview-ai-result', function() {
+            previewAIResult();
+        });
+        
+        // 应用AI结果
+        $(document).off('click', '#apply-ai-result').on('click', '#apply-ai-result', function() {
+            applyAIResult();
+        });
+        
+        // 对话历史管理
+        $(document).off('click', '#view-conversation-history').on('click', '#view-conversation-history', function() {
+            showConversationHistory();
+        });
+        
+        $(document).off('click', '#clear-conversation-history').on('click', '#clear-conversation-history', function() {
+            clearConversationHistory();
+        });
+    }
+    
+    /**
+     * 切换API提供商
+     */
+    function switchAPIProvider(provider) {
+        $('.api-config').hide();
+        if (provider === 'gemini') {
+            $('#gemini-config').show();
+        } else if (provider === 'custom') {
+            $('#custom-config').show();
+        }
+    }
+    
+    /**
+     * 处理插入正则表达式
+     */
+    async function handleInsertRegex() {
+        console.log(`[${EXTENSION_NAME}] 处理插入正则表达式`);
+        
+        try {
+            // 获取当前角色信息
+            const characterInfo = getCurrentCharacterInfo();
+            if (!characterInfo) {
+                showStatus('❌ 请先选择一个角色', true);
+                return;
+            }
+            
+            // 收集表单数据
+            const formData = {
+                scriptName: $('#regex-script-name').val() || '',
+                pattern: $('#regex-pattern').val() || '',
+                replacement: $('#regex-replacement').val() || '',
+                flags: $('#regex-flags').val() || 'g',
+                affects: $('#regex-affects').val() || 'both'
+            };
+            
+            // 调用处理函数
+            const success = await handleInsertRegexWithData(formData, characterInfo);
+            
+            if (success) {
+                showStatus('✅ 正则表达式已成功添加');
+                
+                // 清空表单（可选）
+                if (!extensionSettings.rememberLastValues) {
+                    $('#regex-script-name').val('快速正则' + Date.now());
+                    $('#regex-pattern').val('');
+                    $('#regex-replacement').val('');
+                }
+            }
+            
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 插入正则表达式失败:`, error);
+            showStatus(`❌ 插入失败: ${error.message}`, true);
+        }
     }
 
     /**
@@ -2955,17 +3023,82 @@ ${bodyMatch[1]}
             name: 'st-status-bar',
             callback: () => {
                 if (extensionSettings.enabled) {
-                    openQuickRegexModal();
-                    return 'ST快速状态栏已打开';
+                    // 直接滚动到设置页面的快速正则工具区域
+                    const toolsSection = document.getElementById('quick-regex-tools');
+                    if (toolsSection) {
+                        toolsSection.scrollIntoView({ behavior: 'smooth' });
+                        return 'ST快速状态栏工具已定位到设置页面';
+                    } else {
+                        return 'ST快速状态栏工具未找到，请检查扩展设置';
+                    }
                 } else {
                     return 'ST快速状态栏已禁用';
                 }
             },
             returns: 'string',
-            helpString: '打开ST快速状态栏模态框',
+            helpString: '定位到ST快速状态栏工具设置',
         });
 
         console.log(`[${EXTENSION_NAME}] 斜杠命令已注册: /st-status-bar`);
+    }
+
+    /**
+     * 初始化角色切换事件监听
+     */
+    function initializeCharacterEventListeners() {
+        console.log(`[${EXTENSION_NAME}] 初始化角色切换事件监听器`);
+        
+        // 监听角色选择事件
+        $(document).off('character_selected.STQuickStatusBar').on('character_selected.STQuickStatusBar', function() {
+            console.log(`[${EXTENSION_NAME}] 检测到角色切换事件 (character_selected)`);
+            setTimeout(() => {
+                updateCharacterInfoDisplay();
+            }, 100); // 短暂延迟确保状态更新
+        });
+        
+        // 监听聊天切换事件
+        $(document).off('chat_changed.STQuickStatusBar').on('chat_changed.STQuickStatusBar', function() {
+            console.log(`[${EXTENSION_NAME}] 检测到聊天切换事件 (chat_changed)`);
+            setTimeout(() => {
+                updateCharacterInfoDisplay();
+            }, 100);
+        });
+        
+        // 监听角色数据更新事件
+        $(document).off('character_edited.STQuickStatusBar').on('character_edited.STQuickStatusBar', function() {
+            console.log(`[${EXTENSION_NAME}] 检测到角色编辑事件 (character_edited)`);
+            updateCharacterInfoDisplay();
+        });
+        
+        // 监听通用UI更新事件
+        $(document).off('character_loaded.STQuickStatusBar').on('character_loaded.STQuickStatusBar', function() {
+            console.log(`[${EXTENSION_NAME}] 检测到角色加载事件 (character_loaded)`);
+            setTimeout(() => {
+                updateCharacterInfoDisplay();
+            }, 200);
+        });
+        
+        // 添加周期性检查作为备用方案（每5秒检查一次）
+        setInterval(() => {
+            if (extensionSettings.enabled) {
+                const currentChar = getCurrentCharacterInfo();
+                const displayedName = $('.character-name').text();
+                if (currentChar && !displayedName.includes(currentChar.name)) {
+                    console.log(`[${EXTENSION_NAME}] 周期性检查发现角色变化，更新显示`);
+                    updateCharacterInfoDisplay();
+                }
+            }
+        }, 5000);
+        
+        console.log(`[${EXTENSION_NAME}] 角色事件监听器初始化完成`);
+    }
+
+    /**
+     * 清理事件监听器
+     */
+    function cleanupEventListeners() {
+        $(document).off('.STQuickStatusBar');
+        console.log(`[${EXTENSION_NAME}] 事件监听器已清理`);
     }
 
     /**
@@ -2992,6 +3125,9 @@ ${bodyMatch[1]}
             // 创建用户界面
             createUI();
 
+            // 初始化角色事件监听
+            initializeCharacterEventListeners();
+
             // 注册斜杠命令
             registerSlashCommands();
 
@@ -3007,8 +3143,15 @@ ${bodyMatch[1]}
      * 清理扩展资源
      */
     function cleanup() {
+        // 清理UI元素
         $(`#${EXTENSION_NAME}-settings`).remove();
+        
+        // 清理事件监听器
+        cleanupEventListeners();
+        
+        // 重置初始化状态
         isInitialized = false;
+        
         console.log(`[${EXTENSION_NAME}] 扩展资源已清理`);
     }
 
@@ -3020,8 +3163,25 @@ ${bodyMatch[1]}
         settings: extensionSettings,
         initialize: initializeExtension,
         cleanup: cleanup,
-        openModal: openQuickRegexModal,
         isInitialized: () => isInitialized,
+        // 新增的工具函数
+        updateCharacterInfo: updateCharacterInfoDisplay,
+        refreshTools: refreshQuickRegexTools,
+        // 调试函数 - 用户可以在控制台调用 STQuickStatusBar.debug() 来诊断问题
+        debug: debugCharacterState,
+        // 手动获取角色信息 - 用于测试
+        getCurrentCharacter: getCurrentCharacterInfo,
+        // 历史对话管理 - 用于测试和调试
+        conversationHistory: conversationHistory,
+        // 测试历史对话功能
+        testHistoryFunction: () => {
+            console.log(`[${EXTENSION_NAME}] 测试历史对话功能`);
+            console.log(`当前历史记录数量: ${conversationHistory.getHistory().length}`);
+            conversationHistory.addToHistory("测试用户输入", "测试AI回复");
+            console.log(`添加测试记录后数量: ${conversationHistory.getHistory().length}`);
+            conversationHistory.updateHistoryDisplay();
+            return '历史对话功能测试完成，请检查控制台日志和UI显示';
+        }
     };
 
     // 当DOM准备就绪时初始化扩展
