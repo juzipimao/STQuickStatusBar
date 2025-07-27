@@ -290,13 +290,13 @@
         if (window.extension_settings && window.extension_settings[EXTENSION_NAME]) {
             Object.assign(extensionSettings, window.extension_settings[EXTENSION_NAME]);
         }
-        
+
         // 尝试从浏览器存储加载API配置
         const hasBrowserConfig = loadAPIConfigFromBrowser();
         if (hasBrowserConfig) {
             console.log(`[${EXTENSION_NAME}] API配置已从浏览器存储恢复`);
         }
-        
+
         console.log(`[${EXTENSION_NAME}] 设置已加载:`, extensionSettings);
     }
 
@@ -2011,7 +2011,7 @@ ${bodyMatch[1]}
         }
 
         const trimmedContent = content.trim();
-        
+
         // 如果已经有代码块包裹，直接返回
         if (trimmedContent.startsWith('```') && trimmedContent.endsWith('```')) {
             console.log(`[${EXTENSION_NAME}] 内容已有代码块包裹，保持原样`);
@@ -2020,8 +2020,8 @@ ${bodyMatch[1]}
 
         // 检测内容类型并添加适当的代码块包裹
         let wrappedContent;
-        
-        if (trimmedContent.toLowerCase().includes('<!doctype html') || 
+
+        if (trimmedContent.toLowerCase().includes('<!doctype html') ||
             trimmedContent.toLowerCase().includes('<html') ||
             (trimmedContent.includes('<') && trimmedContent.includes('</') && trimmedContent.includes('>'))) {
             // HTML内容
@@ -2095,11 +2095,21 @@ ${bodyMatch[1]}
     function switchToPage(pageId) {
         console.log(`[${EXTENSION_NAME}] 切换到页面: ${pageId}`);
 
+        // 增强移动端调试信息
+        const isMobile = isMobileDevice();
+        if (isMobile) {
+            console.log(`[${EXTENSION_NAME}] 移动端页面切换开始`);
+        }
+
         // 隐藏所有页面
         const pages = document.querySelectorAll('.page-content');
-        pages.forEach(page => {
+        console.log(`[${EXTENSION_NAME}] 找到 ${pages.length} 个页面内容区域`);
+        pages.forEach((page, index) => {
             page.style.display = 'none';
             page.classList.remove('active');
+            if (isMobile) {
+                console.log(`[${EXTENSION_NAME}] 隐藏页面 ${index + 1}: ${page.id}`);
+            }
         });
 
         // 显示目标页面
@@ -2107,22 +2117,61 @@ ${bodyMatch[1]}
         if (targetPage) {
             targetPage.style.display = 'block';
             targetPage.classList.add('active');
+            console.log(`[${EXTENSION_NAME}] 目标页面 page-${pageId} 已显示`);
+
+            if (isMobile) {
+                // 移动端额外检查页面可见性
+                const rect = targetPage.getBoundingClientRect();
+                console.log(`[${EXTENSION_NAME}] 移动端页面位置信息:`, {
+                    visible: rect.height > 0 && rect.width > 0,
+                    top: rect.top,
+                    height: rect.height,
+                    display: window.getComputedStyle(targetPage).display
+                });
+            }
+        } else {
+            console.error(`[${EXTENSION_NAME}] 找不到目标页面: page-${pageId}`);
         }
 
         // 更新标签状态
         const tabs = document.querySelectorAll('.tab-button');
-        tabs.forEach(tab => {
+        console.log(`[${EXTENSION_NAME}] 找到 ${tabs.length} 个标签按钮`);
+        tabs.forEach((tab, index) => {
             tab.classList.remove('active');
+            if (isMobile) {
+                console.log(`[${EXTENSION_NAME}] 移除标签 ${index + 1} 的active状态: ${tab.id}`);
+            }
         });
 
         const targetTab = document.getElementById(`tab-${pageId}`);
         if (targetTab) {
             targetTab.classList.add('active');
+            console.log(`[${EXTENSION_NAME}] 目标标签 tab-${pageId} 已激活`);
+
+            if (isMobile) {
+                // 移动端检查标签按钮状态
+                const tabRect = targetTab.getBoundingClientRect();
+                console.log(`[${EXTENSION_NAME}] 移动端标签按钮状态:`, {
+                    classes: targetTab.className,
+                    visible: tabRect.height > 0 && tabRect.width > 0,
+                    styles: {
+                        background: window.getComputedStyle(targetTab).backgroundColor,
+                        color: window.getComputedStyle(targetTab).color,
+                        transform: window.getComputedStyle(targetTab).transform
+                    }
+                });
+            }
+        } else {
+            console.error(`[${EXTENSION_NAME}] 找不到目标标签: tab-${pageId}`);
         }
 
         // 保存AI设置（如果在AI页面）
         if (pageId === 'ai') {
             saveAISettings();
+        }
+
+        if (isMobile) {
+            console.log(`[${EXTENSION_NAME}] 移动端页面切换完成: ${pageId}`);
         }
     }
 
@@ -2163,7 +2212,7 @@ ${bodyMatch[1]}
 
             // 保存到SillyTavern全局设置
             saveSettings();
-            
+
             // 显示保存成功指示器
             showAutoSaveIndicator(true);
             console.log(`[${EXTENSION_NAME}] API配置已自动保存`);
@@ -2180,11 +2229,11 @@ ${bodyMatch[1]}
         try {
             const localStorageKey = `${EXTENSION_NAME}_APIConfig`;
             const savedConfig = localStorage.getItem(localStorageKey);
-            
+
             if (savedConfig) {
                 const config = JSON.parse(savedConfig);
                 console.log(`[${EXTENSION_NAME}] 从浏览器加载API配置:`, config);
-                
+
                 // 将保存的配置合并到extensionSettings
                 Object.assign(extensionSettings, {
                     aiProvider: config.aiProvider || extensionSettings.aiProvider,
@@ -2194,7 +2243,7 @@ ${bodyMatch[1]}
                     customApiKey: config.customApiKey || extensionSettings.customApiKey,
                     customModel: config.customModel || extensionSettings.customModel
                 });
-                
+
                 return true;
             }
         } catch (error) {
@@ -2209,11 +2258,11 @@ ${bodyMatch[1]}
     function showAutoSaveIndicator(success = true) {
         const indicator = document.getElementById('api-save-indicator');
         if (!indicator) return;
-        
+
         indicator.style.display = 'inline-block';
         indicator.className = `save-indicator ${success ? 'success' : 'error'}`;
         indicator.textContent = success ? '✓ 已保存' : '✗ 保存失败';
-        
+
         // 2秒后隐藏指示器
         setTimeout(() => {
             if (indicator) {
@@ -2344,6 +2393,14 @@ ${bodyMatch[1]}
     }
 
     /**
+     * 检测是否为移动设备
+     */
+    function isMobileDevice() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+               window.innerWidth <= 768;
+    }
+
+    /**
      * 绑定模态框事件
      */
     function bindModalEvents() {
@@ -2351,13 +2408,61 @@ ${bodyMatch[1]}
 
         // === 页面切换事件 ===
         const tabButtons = document.querySelectorAll('.tab-button');
-        tabButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                const pageId = button.getAttribute('data-page');
-                if (pageId) {
-                    switchToPage(pageId);
-                }
-            });
+        const isMobile = isMobileDevice();
+        console.log(`[${EXTENSION_NAME}] 检测到设备类型: ${isMobile ? '移动设备' : '桌面设备'}`);
+
+        tabButtons.forEach((button, index) => {
+            console.log(`[${EXTENSION_NAME}] 绑定第${index + 1}个标签按钮事件: ${button.getAttribute('data-page')}`);
+
+            if (isMobile) {
+                // 移动设备：优先使用触摸事件，同时保留点击事件作为后备
+                let touchStarted = false;
+
+                button.addEventListener('touchstart', (e) => {
+                    console.log(`[${EXTENSION_NAME}] 触摸开始: ${button.getAttribute('data-page')}`);
+                    touchStarted = true;
+                    e.preventDefault(); // 防止触发点击事件
+                }, { passive: false });
+
+                button.addEventListener('touchend', (e) => {
+                    console.log(`[${EXTENSION_NAME}] 触摸结束: ${button.getAttribute('data-page')}`);
+                    if (touchStarted) {
+                        const pageId = button.getAttribute('data-page');
+                        if (pageId) {
+                            console.log(`[${EXTENSION_NAME}] 通过触摸切换到页面: ${pageId}`);
+                            switchToPage(pageId);
+                        }
+                        touchStarted = false;
+                        e.preventDefault(); // 防止触发点击事件
+                    }
+                }, { passive: false });
+
+                button.addEventListener('touchcancel', () => {
+                    console.log(`[${EXTENSION_NAME}] 触摸取消: ${button.getAttribute('data-page')}`);
+                    touchStarted = false;
+                });
+
+                // 添加点击事件作为后备（对于某些移动浏览器）
+                button.addEventListener('click', (e) => {
+                    if (!touchStarted) { // 只有在没有触摸事件时才处理点击
+                        console.log(`[${EXTENSION_NAME}] 移动端点击后备: ${button.getAttribute('data-page')}`);
+                        const pageId = button.getAttribute('data-page');
+                        if (pageId) {
+                            switchToPage(pageId);
+                        }
+                    }
+                    e.preventDefault();
+                });
+            } else {
+                // 桌面设备：使用标准点击事件
+                button.addEventListener('click', () => {
+                    const pageId = button.getAttribute('data-page');
+                    console.log(`[${EXTENSION_NAME}] 桌面端点击切换到页面: ${pageId}`);
+                    if (pageId) {
+                        switchToPage(pageId);
+                    }
+                });
+            }
         });
 
         // === AI页面事件 ===

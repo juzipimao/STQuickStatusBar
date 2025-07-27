@@ -485,91 +485,157 @@ input[type="password"].form-control {
 }
 
 /* === 响应式设计 === */
+/* === 移动端标签按钮修复 === */
 @media (max-width: 768px) {
     .quick-regex-container {
         padding: 10px;
         max-width: 95vw;
         max-height: 90vh;
     }
-    
+
     .page-content {
         max-height: calc(90vh - 180px);
         padding: 15px 0;
     }
-    
+
     .form-row {
         flex-direction: column;
         gap: 10px;
     }
-    
+
     .character-info {
         flex-direction: column;
         gap: 8px;
     }
-    
+
     .character-avatar {
         width: 40px;
         height: 40px;
     }
-    
+
     #STQuickStatusBar-settings {
         padding: 10px;
         margin: 5px 0;
     }
-    
+
     .page-tabs {
         flex-direction: column;
-        gap: 5px;
-    }
-    
-    .tab-button {
-        border-radius: 6px;
-        top: 0;
+        gap: 8px;
         border-bottom: 1px solid var(--SmartThemeBorderColor);
+        padding-bottom: 10px;
     }
-    
+
+    /* 移动端标签按钮特殊处理 */
+    .tab-button {
+        border-radius: 8px !important;
+        top: 0 !important;
+        transform: none !important;
+        border: 1px solid var(--SmartThemeBorderColor) !important;
+        border-bottom: 1px solid var(--SmartThemeBorderColor) !important;
+        position: relative !important;
+        z-index: 2 !important;
+        /* 确保触摸事件正常 */
+        touch-action: manipulation !important;
+        -webkit-tap-highlight-color: transparent !important;
+        cursor: pointer !important;
+        /* 移除可能干扰触摸的效果 */
+        backdrop-filter: none !important;
+        overflow: visible !important;
+        /* 增强触摸目标大小 */
+        min-height: 44px !important;
+        min-width: 120px !important;
+        /* 触摸反馈 */
+        transition: all 0.1s ease !important;
+    }
+
+    /* 移动端触摸时的视觉反馈 */
+    .tab-button:active {
+        background: var(--st-accent-blue) !important;
+        color: white !important;
+        transform: scale(0.98) !important;
+    }
+
+    /* 移动端移除动画伪元素 */
+    .tab-button::before {
+        display: none !important;
+    }
+
+    .tab-button:hover {
+        transform: none !important;
+        background: var(--st-bg-tertiary) !important;
+        color: var(--st-text-primary) !important;
+        box-shadow: none !important;
+    }
+
     .tab-button.active {
-        border-bottom: 1px solid var(--SmartThemeQuoteColor);
+        background: var(--st-accent-blue) !important;
+        color: white !important;
+        border-color: var(--st-accent-blue) !important;
+        border-bottom-color: var(--st-accent-blue) !important;
+        box-shadow: 0 2px 4px rgba(66, 153, 225, 0.3) !important;
+        transform: none !important;
     }
-    
+
+    /* 移动端页面内容调整 */
+    .page-content {
+        padding: 10px 0;
+        margin-top: 10px;
+    }
+
+    /* 移动端模态框额外优化 */
+    .quick-regex-container {
+        /* 确保在移动端正确显示 */
+        will-change: transform !important;
+        backface-visibility: hidden !important;
+        -webkit-backface-visibility: hidden !important;
+    }
+
+    /* 移动端标签容器优化 */
+    .page-tabs {
+        /* 确保标签在移动端正确渲染 */
+        will-change: auto !important;
+        transform: translateZ(0) !important;
+        -webkit-transform: translateZ(0) !important;
+    }
+
     /* 统一渲染区域移动端适配 */
     .unified-content-section {
         padding: 15px;
         margin-bottom: 15px;
     }
-    
+
     .unified-content-display {
         padding: 15px;
         max-height: 400px;
     }
-    
+
     .main-status-items {
         grid-template-columns: 1fr;
         gap: 8px;
     }
-    
+
     .status-item {
         padding: 8px 10px;
         font-size: 13px;
     }
-    
+
     .status-icon {
         font-size: 14px;
     }
-    
+
     .preview-popup-container {
         max-width: 95vw;
         padding: 10px;
     }
-    
+
     .comparison-grid {
         grid-template-columns: 1fr;
     }
-    
+
     .status-items {
         flex-direction: column;
     }
-    
+
     .preview-popup-header {
         flex-direction: column;
         gap: 10px;
@@ -581,15 +647,15 @@ input[type="password"].form-control {
     .quick-regex-container {
         max-height: 95vh;
     }
-    
+
     .page-content {
         max-height: calc(95vh - 150px);
     }
-    
+
     .quick-regex-header {
         margin-bottom: 10px;
     }
-    
+
     .quick-regex-footer {
         margin-top: 10px;
         padding-top: 5px;
@@ -958,11 +1024,11 @@ select.form-control {
 /* === 内容分隔线样式 === */
 .content-divider {
     height: 2px;
-    background: linear-gradient(90deg, 
-        transparent 0%, 
-        var(--SmartThemeBorderColor) 20%, 
-        var(--SmartThemeQuoteColor) 50%, 
-        var(--SmartThemeBorderColor) 80%, 
+    background: linear-gradient(90deg,
+        transparent 0%,
+        var(--SmartThemeBorderColor) 20%,
+        var(--SmartThemeQuoteColor) 50%,
+        var(--SmartThemeBorderColor) 80%,
         transparent 100%);
     margin: 20px 0;
     border-radius: 1px;
@@ -1238,15 +1304,15 @@ select.form-control {
         max-width: 95vw;
         padding: 10px;
     }
-    
+
     .comparison-grid {
         grid-template-columns: 1fr;
     }
-    
+
     .status-items {
         flex-direction: column;
     }
-    
+
     .preview-popup-header {
         flex-direction: column;
         gap: 10px;
@@ -2111,27 +2177,27 @@ select.form-control {
         align-items: stretch;
         gap: 8px;
     }
-    
+
     .ai-history-btn, .ai-clear-btn {
         justify-content: center;
         padding: 10px 16px;
     }
-    
+
     .history-count {
         text-align: center;
     }
-    
+
     .conversation-history-display {
         max-width: 95vw;
         padding: 10px;
     }
-    
+
     .history-header {
         flex-direction: column;
         gap: 5px;
         text-align: center;
     }
-    
+
     .history-item {
         padding: 12px;
     }
