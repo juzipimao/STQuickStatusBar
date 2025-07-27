@@ -3,25 +3,21 @@
 /* === 扩展设置面板样式 === */
 #STQuickStatusBar-settings {
     margin: 10px 0;
-    padding: 15px;
+    padding: 0;
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 5px;
-    background: var(--SmartThemeBodyColor);
+    background: transparent;
 }
 
 #STQuickStatusBar-settings h3 {
-    margin: 0 0 15px 0;
+    margin: 0;
     color: var(--SmartThemeEmColor);
-    font-size: 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    font-size: 15px;
+    text-align: center;
+    font-weight: 500;
+    padding: 0;
 }
 
-#STQuickStatusBar-settings h3::before {
-    content: "🔧";
-    font-size: 18px;
-}
 
 #STQuickStatusBar-settings .checkbox_label {
     display: block;
@@ -454,32 +450,47 @@ input[type="password"].form-control {
 }
 
 #STQuickStatusBar-settings .inline-drawer-header {
-    background: var(--SmartThemeBlurTintColor);
-    padding: 8px 12px;
+    background: transparent;
+    padding: 5px 0;
     cursor: pointer;
     display: flex;
     justify-content: space-between;
     align-items: center;
     user-select: none;
-    transition: background-color 0.2s ease;
+    transition: all var(--animation-duration-2x);
+    border: none;
+    position: relative;
 }
 
 #STQuickStatusBar-settings .inline-drawer-header:hover {
-    background: var(--SmartThemeBodyColor);
+    filter: brightness(150%);
+}
+
+#STQuickStatusBar-settings .inline-drawer-header:hover .inline-drawer-icon {
+    filter: brightness(150%);
 }
 
 #STQuickStatusBar-settings .inline-drawer-content {
     padding: 12px;
     border-top: 1px solid var(--SmartThemeBorderColor);
+    display: block;
 }
 
 #STQuickStatusBar-settings .inline-drawer-icon {
-    transition: transform 0.2s ease;
+    display: block;
+    cursor: pointer;
+    font-size: calc(var(--mainFontSize, 14px) * 1.5);
+    background-size: cover;
+    background-repeat: no-repeat;
+    filter: brightness(75%);
+    transition: transform 0.2s ease, filter 0.2s ease;
+    transform: rotate(0deg);
 }
 
 #STQuickStatusBar-settings .inline-drawer.closed .inline-drawer-icon {
     transform: rotate(-90deg);
 }
+
 
 #STQuickStatusBar-settings .inline-drawer.closed .inline-drawer-content {
     display: none;
@@ -515,7 +526,7 @@ input[type="password"].form-control {
     }
 
     #STQuickStatusBar-settings {
-        padding: 10px;
+        padding: 0;
         margin: 5px 0;
     }
 

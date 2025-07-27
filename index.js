@@ -2715,13 +2715,19 @@ ${bodyMatch[1]}
         const icon = drawer.querySelector('.inline-drawer-icon');
         
         if (drawer.classList.contains('closed')) {
+            // 展开
             drawer.classList.remove('closed');
             content.style.display = 'block';
-            icon.textContent = '🔽';
+            if (icon) {
+                icon.style.transform = 'rotate(0deg)';
+            }
         } else {
+            // 收起
             drawer.classList.add('closed');
             content.style.display = 'none';
-            icon.textContent = '▶️';
+            if (icon) {
+                icon.style.transform = 'rotate(-90deg)';
+            }
         }
     }
     
@@ -2740,9 +2746,9 @@ ${bodyMatch[1]}
                 <div class="inline-drawer">
                     <div class="inline-drawer-header" onclick="toggleDrawer(this)">
                         <h3>ST快速状态栏 - 正则表达式工具</h3>
-                        <span class="inline-drawer-icon">🔽</span>
+                        <div class="fa-solid fa-circle-chevron-down inline-drawer-icon"></div>
                     </div>
-                    <div class="inline-drawer-content">
+                    <div class="inline-drawer-content" style="display: block;">
                         <!-- 快速正则工具区域 -->
                         <div id="quick-regex-tools-container"></div>
                         
