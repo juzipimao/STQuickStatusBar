@@ -385,14 +385,63 @@
     function getCurrentCharacterInfo() {
         try {
             console.log(`[${EXTENSION_NAME}] 开始获取角色信息`);
-            console.log(`[${EXTENSION_NAME}] this_chid 值:`, this_chid);
+            
+            // 方法1：优先使用 context 获取（最实时的方式）
+            if (typeof getContext === 'function') {
+                const context = getContext();
+                console.log(`[${EXTENSION_NAME}] context 获取结果:`, {
+                    characterId: context?.characterId,
+                    name2: context?.name2,
+                    mainApi: context?.mainApi
+                });
+                
+                if (context && context.characterId !== undefined && context.characterId !== null) {
+                    const charId = parseInt(context.characterId);
+                    console.log(`[${EXTENSION_NAME}] 从context获取到characterId:`, charId);
+                    
+                    // 检查字符数组
+                    if (characters && Array.isArray(characters) && characters[charId]) {
+                        const character = characters[charId];
+                        console.log(`[${EXTENSION_NAME}] ✅ 通过 context.characterId 获取角色成功:`, character.name);
+                        return {
+                            id: charId,
+                            name: character.name || '未知角色',
+                            avatar: character.avatar || '',
+                            description: character.description || ''
+                        };
+                    } else {
+                        console.warn(`[${EXTENSION_NAME}] characters[${charId}] 不存在，characters长度:`, characters?.length);
+                    }
+                }
+                
+                // 尝试通过 name2 查找角色
+                if (context && context.name2) {
+                    console.log(`[${EXTENSION_NAME}] 尝试通过name2查找角色:`, context.name2);
+                    if (characters && Array.isArray(characters)) {
+                        for (let i = 0; i < characters.length; i++) {
+                            if (characters[i] && characters[i].name === context.name2) {
+                                console.log(`[${EXTENSION_NAME}] ✅ 通过name2匹配找到角色:`, characters[i].name);
+                                return {
+                                    id: i,
+                                    name: characters[i].name || '未知角色',
+                                    avatar: characters[i].avatar || '',
+                                    description: characters[i].description || ''
+                                };
+                            }
+                        }
+                        console.warn(`[${EXTENSION_NAME}] 未找到匹配name2的角色:`, context.name2);
+                    }
+                }
+            }
+            
+            // 方法2：备用 this_chid
+            console.log(`[${EXTENSION_NAME}] 备用方案 - this_chid 值:`, this_chid);
             console.log(`[${EXTENSION_NAME}] characters 数组长度:`, characters?.length);
             
-            // 方法1：优先使用 this_chid (最可靠的方式)
             if (this_chid !== undefined && this_chid !== null && 
                 characters && Array.isArray(characters) && characters[this_chid]) {
                 const character = characters[this_chid];
-                console.log(`[${EXTENSION_NAME}] 通过 this_chid 获取角色成功:`, character.name);
+                console.log(`[${EXTENSION_NAME}] ✅ 通过 this_chid 获取角色成功:`, character.name);
                 return {
                     id: this_chid,
                     name: character.name || '未知角色',
@@ -401,58 +450,14 @@
                 };
             }
             
-            // 方法2：尝试通过 context 获取
-            if (typeof getContext === 'function') {
-                const context = getContext();
-                console.log(`[${EXTENSION_NAME}] context 内容:`, context);
-                
-                if (context && context.characterId !== undefined) {
-                    // 2a. 尝试直接作为数组索引访问
-                    if (characters && characters[context.characterId]) {
-                        const character = characters[context.characterId];
-                        console.log(`[${EXTENSION_NAME}] 通过 context.characterId 直接获取角色成功`);
-                        return {
-                            id: context.characterId,
-                            name: character.name || '未知角色',
-                            avatar: character.avatar || '',
-                            description: character.description || ''
-                        };
-                    }
-                    
-                    // 2b. 尝试查找匹配的角色
-                    if (characters && Array.isArray(characters)) {
-                        const foundIndex = characters.findIndex(char => 
-                            char && (
-                                char.avatar === context.characterId || 
-                                char.name === context.characterId ||
-                                char.id === context.characterId
-                            )
-                        );
-                        
-                        if (foundIndex !== -1) {
-                            const foundCharacter = characters[foundIndex];
-                            console.log(`[${EXTENSION_NAME}] 通过查找获取角色成功:`, foundCharacter.name);
-                            return {
-                                id: foundIndex,
-                                name: foundCharacter.name || '未知角色',
-                                avatar: foundCharacter.avatar || '',
-                                description: foundCharacter.description || ''
-                            };
-                        }
-                    }
-                }
-            }
-            
-            // 方法3：检查是否有任何已选择的角色
+            // 方法3：最后尝试获取第一个可用角色
             if (characters && Array.isArray(characters) && characters.length > 0) {
-                // 查找第一个有效的角色作为回退
                 for (let i = 0; i < characters.length; i++) {
                     if (characters[i] && characters[i].name) {
-                        console.log(`[${EXTENSION_NAME}] 使用第一个有效角色作为回退:`, characters[i].name);
-                        console.warn(`[${EXTENSION_NAME}] 注意：这是回退方案，可能不是当前选择的角色`);
+                        console.log(`[${EXTENSION_NAME}] ⚠️ 使用第一个可用角色作为备用:`, characters[i].name);
                         return {
                             id: i,
-                            name: characters[i].name,
+                            name: characters[i].name || '未知角色',
                             avatar: characters[i].avatar || '',
                             description: characters[i].description || ''
                         };
@@ -460,13 +465,11 @@
                 }
             }
             
-            console.warn(`[${EXTENSION_NAME}] 所有方法都无法获取角色信息`);
-            console.log(`[${EXTENSION_NAME}] 调试信息 - this_chid:`, this_chid, 'characters:', characters);
+            console.error(`[${EXTENSION_NAME}] ❌ 所有方法都无法获取角色信息`);
             return null;
             
         } catch (error) {
-            console.error(`[${EXTENSION_NAME}] 获取角色信息失败:`, error);
-            console.error(`[${EXTENSION_NAME}] 错误堆栈:`, error.stack);
+            console.error(`[${EXTENSION_NAME}] 获取角色信息时出错:`, error);
             return null;
         }
     }
@@ -3233,6 +3236,35 @@ ${bodyMatch[1]}
     }
 
     /**
+     * 强制刷新角色信息（用于调试和手动刷新）
+     */
+    function forceRefreshCharacterInfo() {
+        console.log(`[${EXTENSION_NAME}] 🔄 强制刷新角色信息`);
+        
+        // 重置缓存的角色信息
+        if (typeof getContext === 'function') {
+            const context = getContext();
+            console.log(`[${EXTENSION_NAME}] 强制刷新 - 当前context:`, {
+                characterId: context?.characterId,
+                name2: context?.name2,
+                chatId: context?.chatId
+            });
+        }
+        
+        console.log(`[${EXTENSION_NAME}] 强制刷新 - this_chid:`, this_chid);
+        console.log(`[${EXTENSION_NAME}] 强制刷新 - characters长度:`, characters?.length);
+        
+        // 强制更新显示
+        updateCharacterInfoDisplay();
+        
+        // 如果工具已经打开，也刷新工具内容
+        const toolsContainer = document.getElementById('quick-regex-tools-container');
+        if (toolsContainer && extensionSettings.enabled) {
+            refreshQuickRegexTools();
+        }
+    }
+
+    /**
      * 更新角色信息显示
      */
     function updateCharacterInfoDisplay() {
@@ -3481,6 +3513,82 @@ ${bodyMatch[1]}
             }
         }, 5000);
         
+        // 新增：监听更多SillyTavern事件
+        $(document).off('characterChanged.STQuickStatusBar').on('characterChanged.STQuickStatusBar', function() {
+            console.log(`[${EXTENSION_NAME}] 检测到角色变更事件 (characterChanged)`);
+            setTimeout(() => {
+                updateCharacterInfoDisplay();
+            }, 150);
+        });
+        
+        // 新增：监听页面可见性变化（用户可能在其他标签页切换了角色）
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden && extensionSettings.enabled) {
+                console.log(`[${EXTENSION_NAME}] 页面重新获得焦点，检查角色状态`);
+                setTimeout(() => {
+                    updateCharacterInfoDisplay();
+                }, 300);
+            }
+        });
+        
+        // 新增：监听全局变量this_chid的变化（更频繁的检查）
+        let lastKnownCharId = this_chid;
+        let lastKnownContext = null;
+        
+        const charIdWatcher = setInterval(() => {
+            if (extensionSettings.enabled) {
+                const currentContext = getContext();
+                const currentCharId = currentContext?.characterId;
+                
+                // 检查 characterId 是否变化
+                if (currentCharId !== undefined && currentCharId !== lastKnownContext?.characterId) {
+                    console.log(`[${EXTENSION_NAME}] 检测到context.characterId变化: ${lastKnownContext?.characterId} -> ${currentCharId}`);
+                    lastKnownContext = currentContext;
+                    updateCharacterInfoDisplay();
+                }
+                
+                // 检查 this_chid 是否变化
+                if (this_chid !== lastKnownCharId) {
+                    console.log(`[${EXTENSION_NAME}] 检测到this_chid变化: ${lastKnownCharId} -> ${this_chid}`);
+                    lastKnownCharId = this_chid;
+                    updateCharacterInfoDisplay();
+                }
+            }
+        }, 500); // 每0.5秒检查一次，更加敏感
+        
+        // 新增：使用MutationObserver监听DOM变化
+        if (typeof MutationObserver !== 'undefined') {
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.type === 'childList' || mutation.type === 'attributes') {
+                        // 检查是否有角色相关的DOM变化
+                        const changedNodes = Array.from(mutation.addedNodes);
+                        const hasCharacterChange = changedNodes.some(node => 
+                            node.nodeType === Node.ELEMENT_NODE && 
+                            (node.classList?.contains('character') || 
+                             node.querySelector?.('.character') ||
+                             node.textContent?.includes('character'))
+                        );
+                        
+                        if (hasCharacterChange && extensionSettings.enabled) {
+                            console.log(`[${EXTENSION_NAME}] DOM变化检测到可能的角色切换`);
+                            setTimeout(() => {
+                                updateCharacterInfoDisplay();
+                            }, 500);
+                        }
+                    }
+                });
+            });
+            
+            // 监听整个文档的变化
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['class', 'data-character']
+            });
+        }
+        
         console.log(`[${EXTENSION_NAME}] 角色事件监听器初始化完成`);
     }
 
@@ -3562,6 +3670,8 @@ ${bodyMatch[1]}
         debug: debugCharacterState,
         // 手动获取角色信息 - 用于测试
         getCurrentCharacter: getCurrentCharacterInfo,
+        // 强制刷新角色信息 - 用于调试角色切换问题
+        forceRefresh: forceRefreshCharacterInfo,
         // 历史对话管理 - 用于测试和调试
         conversationHistory: conversationHistory,
         // 测试历史对话功能
