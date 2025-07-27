@@ -1,8 +1,8 @@
 /**
  * ST快速状态栏扩展 (ST Quick Status Bar Extension)
- * 
+ *
  * 提供一个简洁的模态框界面，让用户快速为当前角色添加正则表达式规则
- * 
+ *
  * 功能特性：
  * - 模态框界面，操作集中便捷
  * - 实时正则表达式验证
@@ -10,7 +10,7 @@
  * - 一键插入正则规则到角色
  * - 可选的测试预览功能
  * - 支持多行文本，完全保留用户输入格式
- * 
+ *
  * @author SillyTavern Plugin Developer
  * @version 1.0.0
  */
@@ -27,7 +27,7 @@
     let getContext, writeExtensionField, characters, this_chid;
     let uuidv4, toastr;
     let loadRegexScripts, reloadCurrentChat, getCurrentChatId;
-    
+
     // 默认设置
     let extensionSettings = {
         enabled: true,
@@ -43,19 +43,166 @@
         geminiApiKey: '',
         customApiUrl: '',
         customApiKey: '',
-        defaultModel: 'gemini-1.5-flash',
-        customModel: ''
+        defaultModel: 'gemini-2.5-pro',
+        customModel: '',
+        // 对话历史设置
+        enableConversationHistory: true,
+        maxHistoryLength: 10
     };
 
     // 扩展是否已初始化
     let isInitialized = false;
 
     /**
+     * 对话历史管理类
+     */
+    class ConversationHistoryManager {
+        constructor() {
+            this.storageKey = 'STQuickStatusBar_ConversationHistory';
+            this.maxHistory = extensionSettings.maxHistoryLength || 10;
+        }
+
+        /**
+         * 获取历史对话
+         */
+        getHistory() {
+            try {
+                const stored = localStorage.getItem(this.storageKey);
+                if (!stored) return [];
+
+                const history = JSON.parse(stored);
+                return Array.isArray(history) ? history : [];
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 获取历史对话失败:`, error);
+                return [];
+            }
+        }
+
+        /**
+         * 添加新对话到历史
+         * @param {string} userPrompt 用户输入
+         * @param {string} aiResponse AI回复
+         */
+        addToHistory(userPrompt, aiResponse) {
+            try {
+                if (!extensionSettings.enableConversationHistory) {
+                    return;
+                }
+
+                if (!userPrompt?.trim() || !aiResponse?.trim()) {
+                    return;
+                }
+
+                const history = this.getHistory();
+                const newEntry = {
+                    id: Date.now(),
+                    timestamp: new Date().toISOString(),
+                    userPrompt: userPrompt.trim(),
+                    aiResponse: aiResponse.trim()
+                };
+
+                // 添加到历史开头
+                history.unshift(newEntry);
+
+                // 限制历史长度
+                if (history.length > this.maxHistory) {
+                    history.splice(this.maxHistory);
+                }
+
+                localStorage.setItem(this.storageKey, JSON.stringify(history));
+                console.log(`[${EXTENSION_NAME}] 对话已添加到历史，当前历史长度: ${history.length}`);
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 添加历史对话失败:`, error);
+            }
+        }
+
+        /**
+         * 获取最新的用户输入
+         */
+        getLatestUserInput() {
+            const history = this.getHistory();
+            return history.length > 0 ? history[0].userPrompt : '';
+        }
+
+        /**
+         * 构建对话上下文（用于AI调用）
+         * @param {string} currentPrompt 当前用户输入
+         * @param {string} apiType API类型 'gemini' 或 'openai'
+         * @returns {Array} 消息数组
+         */
+        buildConversationContext(currentPrompt, apiType = 'openai') {
+            if (!extensionSettings.enableConversationHistory) {
+                return [];
+            }
+
+            const history = this.getHistory();
+            const messages = [];
+
+            // 添加历史对话（最近的5条，避免token过多）
+            const recentHistory = history.slice(0, 5);
+            for (const entry of recentHistory.reverse()) { // 按时间顺序
+                if (apiType === 'gemini') {
+                    // Gemini格式：user/model
+                    messages.push({
+                        role: "user",
+                        content: entry.userPrompt
+                    });
+                    messages.push({
+                        role: "model",
+                        content: entry.aiResponse
+                    });
+                } else {
+                    // OpenAI格式：user/assistant
+                    messages.push({
+                        role: "user",
+                        content: entry.userPrompt
+                    });
+                    messages.push({
+                        role: "assistant",
+                        content: entry.aiResponse
+                    });
+                }
+            }
+
+            return messages;
+        }
+
+        /**
+         * 清空历史对话
+         */
+        clearHistory() {
+            try {
+                localStorage.removeItem(this.storageKey);
+                console.log(`[${EXTENSION_NAME}] 历史对话已清空`);
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 清空历史对话失败:`, error);
+            }
+        }
+
+        /**
+         * 更新最大历史长度
+         */
+        updateMaxHistory(newMax) {
+            this.maxHistory = newMax;
+
+            // 如果当前历史超过新的限制，进行截断
+            const history = this.getHistory();
+            if (history.length > newMax) {
+                history.splice(newMax);
+                localStorage.setItem(this.storageKey, JSON.stringify(history));
+            }
+        }
+    }
+
+    // 创建历史管理实例
+    const conversationHistory = new ConversationHistoryManager();
+
+    /**
      * 异步导入SillyTavern的模块
      */
     async function importSillyTavernModules() {
         console.log(`[${EXTENSION_NAME}] 开始导入SillyTavern模块`);
-        
+
         try {
             // 导入弹窗模块
             console.log(`[${EXTENSION_NAME}] 导入弹窗模块: /scripts/popup.js`);
@@ -122,7 +269,7 @@
 
             console.log(`[${EXTENSION_NAME}] 所有SillyTavern模块导入成功`);
             return true;
-            
+
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 模块导入失败:`, error);
             console.error(`[${EXTENSION_NAME}] 错误堆栈:`, error.stack);
@@ -139,7 +286,7 @@
             window.extension_settings = {};
             console.log(`[${EXTENSION_NAME}] 初始化 window.extension_settings 对象`);
         }
-        
+
         if (window.extension_settings && window.extension_settings[EXTENSION_NAME]) {
             Object.assign(extensionSettings, window.extension_settings[EXTENSION_NAME]);
         }
@@ -153,13 +300,13 @@
         if (!window.extension_settings) {
             window.extension_settings = {};
         }
-        
+
         window.extension_settings[EXTENSION_NAME] = extensionSettings;
-        
+
         if (typeof saveSettingsDebounced === 'function') {
             saveSettingsDebounced();
         }
-        
+
         console.log(`[${EXTENSION_NAME}] 设置已保存`);
     }
 
@@ -170,7 +317,7 @@
         try {
             const context = getContext();
             const characterId = context.characterId;
-            
+
             if (characterId === undefined || characterId === null) {
                 return null;
             }
@@ -202,13 +349,13 @@
             if (!pattern) {
                 return { isValid: false, error: '正则表达式不能为空' };
             }
-            
+
             // 如果包含换行符，我们跳过RegExp验证，只检查基本语法
             if (pattern.includes('\n')) {
                 console.log(`[${EXTENSION_NAME}] 多行正则表达式，跳过RegExp验证`);
                 return { isValid: true, error: null };
             }
-            
+
             // 单行正则表达式使用标准验证
             new RegExp(pattern, flags);
             return { isValid: true, error: null };
@@ -225,11 +372,11 @@
             const regex = new RegExp(pattern, flags);
             const matches = Array.from(testText.matchAll(regex));
             let result = testText;
-            
+
             if (replacement && matches.length > 0) {
                 result = testText.replace(regex, replacement);
             }
-            
+
             return {
                 success: true,
                 matchCount: matches.length,
@@ -252,7 +399,7 @@
      */
     function createRegexScript(scriptName, findRegex, replaceWith) {
         // 完全保持用户输入的原始内容，不做任何处理或转换
-        
+
         console.log(`[${EXTENSION_NAME}] 创建正则脚本对象 - 用户原始输入:`, {
             scriptName: `"${scriptName}"`,
             findRegex: `"${findRegex}"`,
@@ -264,7 +411,7 @@
             findRegexCharCodes: findRegex?.split('').slice(0, 20).map((c, i) => `${i}:${c.charCodeAt(0)}`),
             replaceWithCharCodes: replaceWith?.split('').slice(0, 20).map((c, i) => `${i}:${c.charCodeAt(0)}`)
         });
-        
+
         const script = {
             id: uuidv4(),
             scriptName: scriptName,
@@ -280,7 +427,7 @@
             minDepth: null,
             maxDepth: null
         };
-        
+
         console.log(`[${EXTENSION_NAME}] 最终创建的正则脚本对象:`, script);
         return script;
     }
@@ -291,7 +438,7 @@
     async function saveRegexScriptToCharacter(regexScript) {
         console.log(`[${EXTENSION_NAME}] saveRegexScriptToCharacter 开始执行`);
         console.log(`[${EXTENSION_NAME}] 输入的regexScript:`, regexScript);
-        
+
         try {
             // 1. 验证角色信息
             console.log(`[${EXTENSION_NAME}] 验证角色信息`);
@@ -305,7 +452,7 @@
             console.log(`[${EXTENSION_NAME}] 获取角色对象 characters[${characterInfo.id}]`);
             const character = characters[characterInfo.id];
             console.log(`[${EXTENSION_NAME}] 角色对象:`, character ? '存在' : '不存在');
-            
+
             // 3. 初始化数据结构
             console.log(`[${EXTENSION_NAME}] 初始化角色数据结构`);
             if (!character.data) {
@@ -323,12 +470,12 @@
 
             const regexScripts = character.data.extensions.regex_scripts;
             console.log(`[${EXTENSION_NAME}] 当前正则脚本数组:`, regexScripts);
-            
+
             // 4. 检查重复脚本
             console.log(`[${EXTENSION_NAME}] 检查是否存在同名脚本: "${regexScript.scriptName}"`);
             const existingIndex = regexScripts.findIndex(script => script.scriptName === regexScript.scriptName);
             console.log(`[${EXTENSION_NAME}] 同名脚本索引:`, existingIndex);
-            
+
             if (existingIndex !== -1) {
                 console.log(`[${EXTENSION_NAME}] 更新现有脚本`);
                 regexScripts[existingIndex] = regexScript;
@@ -348,21 +495,21 @@
             console.log(`[${EXTENSION_NAME}] 调用 writeExtensionField(${characterInfo.id}, 'regex_scripts', regexScripts)`);
             await writeExtensionField(characterInfo.id, 'regex_scripts', regexScripts);
             console.log(`[${EXTENSION_NAME}] writeExtensionField 调用完成`);
-            
+
             // 7. 更新允许列表
             console.log(`[${EXTENSION_NAME}] 更新角色允许列表`);
-            
+
             // 确保全局扩展设置对象存在
             if (!window.extension_settings) {
                 window.extension_settings = {};
                 console.log(`[${EXTENSION_NAME}] 创建 window.extension_settings 对象`);
             }
-            
+
             if (!window.extension_settings.character_allowed_regex) {
                 window.extension_settings.character_allowed_regex = [];
                 console.log(`[${EXTENSION_NAME}] 创建 character_allowed_regex 数组`);
             }
-            
+
             if (!window.extension_settings.character_allowed_regex.includes(character.avatar)) {
                 window.extension_settings.character_allowed_regex.push(character.avatar);
                 console.log(`[${EXTENSION_NAME}] 角色 ${character.avatar} 已添加到允许列表`);
@@ -371,7 +518,7 @@
             }
 
             console.log(`[${EXTENSION_NAME}] 正则脚本已保存到角色: ${characterInfo.name}`);
-            
+
             // 8. 触发UI刷新 - 关键修复：调用SillyTavern的刷新函数
             console.log(`[${EXTENSION_NAME}] 开始刷新正则脚本UI`);
             try {
@@ -382,7 +529,7 @@
                 } else {
                     console.warn(`[${EXTENSION_NAME}] loadRegexScripts函数不可用，跳过UI刷新`);
                 }
-                
+
                 // 重新加载当前聊天以应用正则变更
                 if (typeof reloadCurrentChat === 'function' && typeof getCurrentChatId === 'function') {
                     const currentChatId = getCurrentChatId();
@@ -400,9 +547,9 @@
                 console.error(`[${EXTENSION_NAME}] 刷新错误堆栈:`, refreshError.stack);
                 // 不抛出错误，因为保存已经成功
             }
-            
+
             return true;
-            
+
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 保存正则脚本失败:`, error);
             console.error(`[${EXTENSION_NAME}] 错误堆栈:`, error.stack);
@@ -424,7 +571,7 @@
                             <span class="character-name">当前角色: ${characterInfo.name}</span>
                         </div>
                     ` : '<div class="no-character">⚠️ 未选择角色</div>'}
-                    
+
                     <!-- 页面切换标签 -->
                     <div class="page-tabs">
                         <button id="tab-manual" class="tab-button active" data-page="manual">
@@ -441,20 +588,20 @@
                     <div class="quick-regex-form">
                         <div class="form-group">
                             <label for="regex-script-name">脚本名称:</label>
-                            <input type="text" id="regex-script-name" class="form-control" 
+                            <input type="text" id="regex-script-name" class="form-control"
                                    placeholder="例如: 移除多余空格" value="快速正则${Date.now()}">
                         </div>
 
                         <div class="form-group">
                             <label for="regex-pattern">查找内容 (正则表达式):</label>
-                            <textarea id="regex-pattern" class="form-control" rows="4" 
+                            <textarea id="regex-pattern" class="form-control" rows="4"
                                    placeholder="例如: \\s+&#10;支持多行正则表达式，所有字符会被原样保存">${extensionSettings.lastRegexPattern}</textarea>
                             <div id="regex-validation" class="validation-message"></div>
                         </div>
 
                         <div class="form-group">
                             <label for="regex-replacement">替换为:</label>
-                            <textarea id="regex-replacement" class="form-control" rows="8" 
+                            <textarea id="regex-replacement" class="form-control" rows="8"
                                       placeholder="例如: 空格 (留空表示删除匹配内容)&#10;支持多行文本，换行符会被完全保留">${extensionSettings.lastReplacement}</textarea>
                             <small style="color: var(--SmartThemeQuoteColor); font-size: 12px;">
                                 📋 提示：此处会完全保留您输入的格式，包括所有空格和换行符
@@ -485,7 +632,7 @@
                         ${extensionSettings.showPreview ? `
                             <div class="form-group preview-section">
                                 <label for="test-text">测试文本 (可选):</label>
-                                <textarea id="test-text" class="form-control" rows="2" 
+                                <textarea id="test-text" class="form-control" rows="2"
                                           placeholder="输入一些文本来测试正则表达式效果..."></textarea>
                                 <div id="preview-result" class="preview-result"></div>
                             </div>
@@ -509,12 +656,12 @@
                         <div id="gemini-config" class="api-config" ${extensionSettings.aiProvider !== 'gemini' ? 'style="display: none;"' : ''}>
                             <div class="form-group">
                                 <label for="gemini-api-key">Gemini API Key:</label>
-                                <input type="password" id="gemini-api-key" class="form-control" 
+                                <input type="password" id="gemini-api-key" class="form-control"
                                        placeholder="输入你的Gemini API密钥" value="${extensionSettings.geminiApiKey}">
                             </div>
                             <div class="form-group">
                                 <label for="gemini-model">模型:</label>
-                                <input type="text" id="gemini-model" class="form-control" 
+                                <input type="text" id="gemini-model" class="form-control"
                                        placeholder="模型名称" value="${extensionSettings.defaultModel}">
                             </div>
                         </div>
@@ -523,17 +670,17 @@
                         <div id="custom-config" class="api-config" ${extensionSettings.aiProvider !== 'custom' ? 'style="display: none;"' : ''}>
                             <div class="form-group">
                                 <label for="custom-api-url">API URL:</label>
-                                <input type="text" id="custom-api-url" class="form-control" 
+                                <input type="text" id="custom-api-url" class="form-control"
                                        placeholder="https://api.example.com/v1/chat/completions" value="${extensionSettings.customApiUrl}">
                             </div>
                             <div class="form-group">
                                 <label for="custom-api-key">API Key:</label>
-                                <input type="password" id="custom-api-key" class="form-control" 
+                                <input type="password" id="custom-api-key" class="form-control"
                                        placeholder="输入你的API密钥" value="${extensionSettings.customApiKey}">
                             </div>
                             <div class="form-group">
                                 <label for="custom-model">模型:</label>
-                                <input type="text" id="custom-model" class="form-control" 
+                                <input type="text" id="custom-model" class="form-control"
                                        placeholder="模型名称" value="${extensionSettings.customModel}">
                             </div>
                         </div>
@@ -541,8 +688,24 @@
                         <!-- AI提示输入 -->
                         <div class="form-group">
                             <label for="ai-prompt">描述你想要的正则功能:</label>
-                            <textarea id="ai-prompt" class="form-control" rows="3" 
-                                      placeholder="例如: 帮我制定一个角色状态栏，在对话开头显示角色的当前状态"></textarea>
+                            <textarea id="ai-prompt" class="form-control" rows="3"
+                                      placeholder="例如: 帮我制定一个角色状态栏，在对话开头显示角色的当前状态">${conversationHistory.getLatestUserInput()}</textarea>
+                            <small style="color: var(--SmartThemeQuoteColor); font-size: 12px;">
+                                💡 提示：输入框已自动填入上次的对话内容，支持多轮对话
+                            </small>
+                        </div>
+
+                        <!-- 对话历史管理 -->
+                        <div class="form-group">
+                            <div class="conversation-history-controls">
+                                <button id="view-conversation-history" class="ai-history-btn" type="button">
+                                    📚 查看对话历史
+                                </button>
+                                <button id="clear-conversation-history" class="ai-clear-btn" type="button">
+                                    🗑️ 清空历史
+                                </button>
+                                <span class="history-count">历史对话: ${conversationHistory.getHistory().length}条</span>
+                            </div>
                         </div>
 
                         <!-- 生成按钮 -->
@@ -567,7 +730,7 @@
                             <!-- 正文使用区域 -->
                             <div class="form-group">
                                 <label for="demo-text">正文使用区域 (效果演示):</label>
-                                <textarea id="demo-text" class="form-control" rows="8" 
+                                <textarea id="demo-text" class="form-control" rows="8"
                                           placeholder="在这里输入示例正文，查看正则表达式的实际应用效果...">这是一段示例对话正文。
 
 用户：今天感觉怎么样？
@@ -586,7 +749,7 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 
                             <div class="form-group">
                                 <label for="demo-result">应用效果预览:</label>
-                                <textarea id="demo-result" class="form-control" rows="10" readonly 
+                                <textarea id="demo-result" class="form-control" rows="10" readonly
                                           placeholder="应用正则表达式后的结果将显示在这里..."></textarea>
                             </div>
 
@@ -600,7 +763,7 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
                         <!-- AI响应原文 -->
                         <div class="form-group">
                             <label for="ai-raw-response">AI原始回复:</label>
-                            <textarea id="ai-raw-response" class="form-control" rows="6" readonly 
+                            <textarea id="ai-raw-response" class="form-control" rows="6" readonly
                                       placeholder="AI的完整回复将显示在这里..."></textarea>
                         </div>
                     </div>
@@ -619,7 +782,7 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
     function updateValidation(pattern, flags) {
         const validation = validateRegex(pattern, flags);
         const validationElement = document.getElementById('regex-validation');
-        
+
         if (!validationElement) return validation;
 
         if (validation.isValid) {
@@ -651,7 +814,7 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
         }
 
         const testResult = testRegexMatch(pattern, flags, testText, replacement);
-        
+
         if (testResult.success) {
             previewElement.innerHTML = `
                 <div class="preview-success">
@@ -677,7 +840,7 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
         if (statusElement) {
             statusElement.innerHTML = message;
             statusElement.className = `status-message ${isError ? 'error' : 'success'}`;
-            
+
             // 3秒后清除消息
             setTimeout(() => {
                 if (statusElement) {
@@ -689,13 +852,13 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
     }
 
     /**
-     * 调用Gemini API
+     * 调用Gemini API (支持对话历史)
      */
     async function callGeminiAPI(prompt, apiKey, model) {
         console.log(`[${EXTENSION_NAME}] 调用Gemini API开始`);
-        
+
         const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        
+
         // 构建系统提示词
         const systemPrompt = `你是一个专业的正则表达式专家，专门为角色扮演游戏创建状态栏文本处理规则。请根据用户的需求生成合适的正则表达式和替换内容。
 
@@ -718,13 +881,13 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 1. 你的回复必须严格按照以下格式，分为四个明确的部分：
    === 正则表达式 ===
    [在这里写正则表达式，使用捕获组()]
-   
+
    === 状态栏XML格式 ===
    [在这里写原始状态栏XML结构，包含模板变量]
-   
+
    === 示例正文内容 ===
    [在这里写包含状态栏的完整示例文本，供用户测试使用]
-   
+
    === HTML美化内容 ===
    [在这里写美化后的HTML页面内容，使用$1,$2,$3等宏引用捕获组]
 
@@ -775,7 +938,7 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 状态栏处理模式：
 1. 替换现有状态栏：
    正则表达式：<state_bar>.*?</state_bar>
-   
+
 2. 如果没有状态栏则插入：
    正则表达式：^(?!.*<state_bar>)(.*)$
    HTML内容：[美化的HTML页面]\\n$1
@@ -809,16 +972,43 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 - HTML美化内容要是完整的HTML页面，包含样式和交互
 - 根据用户的具体需求调整标签名称和数量
 - 确保生成的内容符合用户的具体要求
-- 🔥 最重要：正则表达式和HTML替换内容必须配套，捕获组数量要匹配，标签名必须一致
+- 🔥 最重要：正则表达式和HTML替换内容必须配套，捕获组数量要匹配，标签名必须一致`;
 
-用户需求：${prompt}`;
+        // 构建对话历史上下文
+        const historyMessages = conversationHistory.buildConversationContext(prompt, 'gemini');
+        console.log(`[${EXTENSION_NAME}] 历史对话数量: ${historyMessages.length / 2}`);
+
+        // 构建完整的对话内容 - Gemini格式
+        const contents = [];
+
+        // 添加系统提示作为第一条用户消息
+        contents.push({
+            role: "user",
+            parts: [{ text: systemPrompt }]
+        });
+
+        // 添加一个模型回复表示理解系统提示
+        contents.push({
+            role: "model",
+            parts: [{ text: "我理解了，我是一个专业的正则表达式专家，会按照您的要求生成状态栏处理规则。" }]
+        });
+
+        // 添加历史对话 - 已经是正确的Gemini格式
+        for (const msg of historyMessages) {
+            contents.push({
+                role: msg.role, // 已经是 'user' 或 'model'
+                parts: [{ text: msg.content }]
+            });
+        }
+
+        // 添加当前用户输入
+        contents.push({
+            role: "user",
+            parts: [{ text: `用户需求：${prompt}` }]
+        });
 
         const requestBody = {
-            contents: [{
-                parts: [{
-                    text: systemPrompt
-                }]
-            }],
+            contents: contents,
             generationConfig: {
                 temperature: 0,
                 maxOutputTokens: 65000
@@ -840,10 +1030,14 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 
             const data = await response.json();
             const text = data.candidates[0].content.parts[0].text;
-            
+
             console.log(`[${EXTENSION_NAME}] Gemini API回复:`, text);
+
+            // 将对话添加到历史记录
+            conversationHistory.addToHistory(prompt, text);
+
             return text;
-            
+
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] Gemini API调用失败:`, error);
             throw error;
@@ -851,11 +1045,11 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
     }
 
     /**
-     * 调用自定义API
+     * 调用自定义API (OpenAI格式, 支持对话历史)
      */
     async function callCustomAPI(prompt, apiUrl, apiKey, model) {
         console.log(`[${EXTENSION_NAME}] 调用自定义API开始`);
-        
+
         // 构建系统提示词
         const systemPrompt = `你是一个专业的正则表达式专家，专门为角色扮演游戏创建状态栏文本处理规则。请根据用户的需求生成合适的正则表达式和替换内容。
 
@@ -878,13 +1072,13 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 1. 你的回复必须严格按照以下格式，分为四个明确的部分：
    === 正则表达式 ===
    [在这里写正则表达式，使用捕获组()]
-   
+
    === 状态栏XML格式 ===
    [在这里写原始状态栏XML结构，包含模板变量]
-   
+
    === 示例正文内容 ===
    [在这里写包含状态栏的完整示例文本，供用户测试使用]
-   
+
    === HTML美化内容 ===
    [在这里写美化后的HTML页面内容，使用$1,$2,$3等宏引用捕获组]
 
@@ -935,7 +1129,7 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 状态栏处理模式：
 1. 替换现有状态栏：
    正则表达式：<state_bar>.*?</state_bar>
-   
+
 2. 如果没有状态栏则插入：
    正则表达式：^(?!.*<state_bar>)(.*)$
    HTML内容：[美化的HTML页面]\\n$1
@@ -969,20 +1163,34 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 - HTML美化内容要是完整的HTML页面，包含样式和交互
 - 根据用户的具体需求调整标签名称和数量
 - 确保生成的内容符合用户的具体要求
-- 🔥 最重要：正则表达式和HTML替换内容必须配套，捕获组数量要匹配，标签名必须一致
+- 🔥 最重要：正则表达式和HTML替换内容必须配套，捕获组数量要匹配，标签名必须一致`;
 
-用户需求：${prompt}`;
+        // 构建对话历史上下文
+        const historyMessages = conversationHistory.buildConversationContext(prompt, 'openai');
+        console.log(`[${EXTENSION_NAME}] 历史对话数量: ${historyMessages.length / 2}`);
+
+        // 构建完整的消息数组
+        const messages = [
+            {
+                role: "system",
+                content: systemPrompt
+            }
+        ];
+
+        // 添加历史对话
+        messages.push(...historyMessages);
+
+        // 添加当前用户输入
+        messages.push({
+            role: "user",
+            content: prompt
+        });
 
         const requestBody = {
             model: model,
-            messages: [
-                {
-                    role: "user",
-                    content: systemPrompt
-                }
-            ],
+            messages: messages,
             temperature: 0,
-            max_tokens: 65000
+            max_tokens: 23000
         };
 
         try {
@@ -1001,10 +1209,14 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 
             const data = await response.json();
             const text = data.choices[0].message.content;
-            
+
             console.log(`[${EXTENSION_NAME}] 自定义API回复:`, text);
+
+            // 将对话添加到历史记录
+            conversationHistory.addToHistory(prompt, text);
+
             return text;
-            
+
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 自定义API调用失败:`, error);
             throw error;
@@ -1016,45 +1228,45 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
      */
     function parseAIResponse(responseText) {
         console.log(`[${EXTENSION_NAME}] 解析AI回复:`, responseText);
-        
+
         let regexPattern = '';
         let xmlContent = '';
         let exampleContent = '';
         let htmlContent = '';
-        
+
         // 尝试按照指定格式解析四个部分
         const regexMatch = responseText.match(/===\s*正则表达式\s*===\s*\n([\s\S]*?)(?=\n\s*===\s*状态栏XML格式\s*===|$)/);
         const xmlMatch = responseText.match(/===\s*状态栏XML格式\s*===\s*\n([\s\S]*?)(?=\n\s*===\s*示例正文内容\s*===|$)/);
         const exampleMatch = responseText.match(/===\s*示例正文内容\s*===\s*\n([\s\S]*?)(?=\n\s*===\s*HTML美化内容\s*===|$)/);
         const htmlMatch = responseText.match(/===\s*HTML美化内容\s*===\s*\n([\s\S]*?)(?=\n\s*===|$)/);
-        
+
         if (regexMatch) {
             regexPattern = regexMatch[1].trim();
             console.log(`[${EXTENSION_NAME}] 解析到正则表达式:`, regexPattern);
         }
-        
+
         if (xmlMatch) {
             xmlContent = xmlMatch[1].trim();
             console.log(`[${EXTENSION_NAME}] 解析到XML内容:`, xmlContent.substring(0, 100) + '...');
         }
-        
+
         if (exampleMatch) {
             exampleContent = exampleMatch[1].trim();
             console.log(`[${EXTENSION_NAME}] 解析到示例内容:`, exampleContent.substring(0, 100) + '...');
         }
-        
+
         if (htmlMatch) {
             htmlContent = htmlMatch[1].trim();
             console.log(`[${EXTENSION_NAME}] 解析到HTML内容:`, htmlContent.substring(0, 100) + '...');
         }
-        
+
         // 如果没有找到四个部分的标准格式，尝试解析三个部分的格式（向下兼容）
         if (!regexPattern || !htmlContent) {
             console.log(`[${EXTENSION_NAME}] 尝试解析三个部分格式...`);
             const oldRegexMatch = responseText.match(/===\s*正则表达式\s*===\s*\n([\s\S]*?)(?=\n\s*===\s*状态栏XML格式\s*===|$)/);
             const oldXmlMatch = responseText.match(/===\s*状态栏XML格式\s*===\s*\n([\s\S]*?)(?=\n\s*===\s*HTML美化内容\s*===|$)/);
             const oldHtmlMatch = responseText.match(/===\s*HTML美化内容\s*===\s*\n([\s\S]*?)(?=\n\s*===|$)/);
-            
+
             if (oldRegexMatch) {
                 regexPattern = oldRegexMatch[1].trim();
             }
@@ -1065,17 +1277,17 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
                 htmlContent = oldHtmlMatch[1].trim();
             }
         }
-        
+
         // 如果没有找到标准格式，尝试解析两个部分的旧格式（向下兼容）
         if (!regexPattern || !htmlContent) {
             console.log(`[${EXTENSION_NAME}] 尝试解析旧格式（两个部分）...`);
             const oldRegexMatch = responseText.match(/===\s*正则表达式\s*===\s*\n([\s\S]*?)(?=\n\s*===\s*替换内容\s*===|$)/);
             const oldReplacementMatch = responseText.match(/===\s*替换内容\s*===\s*\n([\s\S]*?)(?=\n\s*===|$)/);
-            
+
             if (oldRegexMatch) {
                 regexPattern = oldRegexMatch[1].trim();
             }
-            
+
             if (oldReplacementMatch) {
                 htmlContent = oldReplacementMatch[1].trim();
                 // 如果是"(删除)"，转换为空字符串
@@ -1084,7 +1296,7 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
                 }
             }
         }
-        
+
         // 如果没有找到标准格式，尝试其他解析方式
         if (!regexPattern && !htmlContent) {
             console.log(`[${EXTENSION_NAME}] 尝试备用解析方式...`);
@@ -1092,7 +1304,7 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
             const lines = responseText.split('\n');
             let foundRegex = false;
             let foundReplacement = false;
-            
+
             for (let line of lines) {
                 if (line.includes('正则') || line.includes('regex') || line.includes('pattern')) {
                     const match = line.match(/[:\-]\s*(.+)$/);
@@ -1109,14 +1321,14 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
                 }
             }
         }
-        
+
         console.log(`[${EXTENSION_NAME}] 最终解析结果:`, {
             regexPattern: regexPattern ? regexPattern.substring(0, 50) + '...' : 'null',
             xmlContent: xmlContent ? xmlContent.substring(0, 50) + '...' : 'null',
             exampleContent: exampleContent ? exampleContent.substring(0, 50) + '...' : 'null',
             htmlContent: htmlContent ? htmlContent.substring(0, 50) + '...' : 'null'
         });
-        
+
         return {
             regexPattern,
             xmlContent,
@@ -1130,67 +1342,67 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
      */
     async function handleAIGenerate() {
         console.log(`[${EXTENSION_NAME}] 开始AI生成正则表达式`);
-        
+
         try {
             // 获取配置
             const provider = document.getElementById('ai-provider')?.value || 'gemini';
             const prompt = document.getElementById('ai-prompt')?.value;
-            
+
             if (!prompt || prompt.trim() === '') {
                 showStatus('❌ 请输入你想要的正则功能描述', true);
                 return;
             }
-            
+
             // 显示生成中状态
             const generateBtn = document.getElementById('generate-regex');
             const originalText = generateBtn.textContent;
             generateBtn.textContent = '🔄 生成中...';
             generateBtn.disabled = true;
-            
+
             let responseText = '';
-            
+
             if (provider === 'gemini') {
                 const apiKey = document.getElementById('gemini-api-key')?.value;
                 const model = document.getElementById('gemini-model')?.value || 'gemini-1.5-flash';
-                
+
                 if (!apiKey) {
                     throw new Error('请输入Gemini API Key');
                 }
-                
+
                 responseText = await callGeminiAPI(prompt, apiKey, model);
-                
+
             } else if (provider === 'custom') {
                 const apiUrl = document.getElementById('custom-api-url')?.value;
                 const apiKey = document.getElementById('custom-api-key')?.value;
                 const model = document.getElementById('custom-model')?.value;
-                
+
                 if (!apiUrl || !apiKey) {
                     throw new Error('请输入API URL和API Key');
                 }
-                
+
                 responseText = await callCustomAPI(prompt, apiUrl, apiKey, model);
             }
-            
+
             // 显示原始回复
             const rawResponseElement = document.getElementById('ai-raw-response');
             if (rawResponseElement) {
                 rawResponseElement.value = responseText;
             }
-            
+
             // 解析回复
             const { regexPattern, replacementContent, exampleContent } = parseAIResponse(responseText);
-            
+
             // 显示解析结果
             const patternElement = document.getElementById('ai-generated-pattern');
             const replacementElement = document.getElementById('ai-generated-replacement');
-            
+
             if (patternElement) {
                 patternElement.value = regexPattern;
             }
             if (replacementElement) {
                 replacementElement.value = replacementContent;
             }
-            
+
             // 如果有示例内容，自动填入正文使用区域
             if (exampleContent) {
                 const contentTextarea = document.getElementById('demo-text');
@@ -1199,15 +1411,15 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
                     console.log(`[${EXTENSION_NAME}] 已自动填入示例内容到正文使用区域`);
                 }
             }
-            
+
             // 显示结果区域
             const resultSection = document.querySelector('.ai-result-section');
             if (resultSection) {
                 resultSection.style.display = 'block';
             }
-            
+
             showStatus('✅ AI生成完成，示例内容已自动填入正文区域');
-            
+
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] AI生成失败:`, error);
             showStatus(`❌ AI生成失败: ${error.message}`, true);
@@ -1226,22 +1438,22 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
      */
     function previewAIResult() {
         console.log(`[${EXTENSION_NAME}] 预览AI生成的结果效果`);
-        
+
         try {
             const aiPattern = document.getElementById('ai-generated-pattern')?.value || '';
             const aiReplacement = document.getElementById('ai-generated-replacement')?.value || '';
             let demoText = document.getElementById('demo-text')?.value || '';
-            
+
             if (!aiPattern) {
                 showStatus('❌ 没有AI生成的正则表达式可以预览', true);
                 return;
             }
-            
+
             if (!demoText.trim()) {
                 // 如果用户没有输入示例文本，使用默认的随机正文
                 demoText = generateRandomDemoText();
             }
-            
+
             // 验证正则表达式
             let regex;
             try {
@@ -1250,7 +1462,7 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
                 showStatus(`❌ 正则表达式无效: ${error.message}`, true);
                 return;
             }
-            
+
             // 应用正则表达式
             let result;
             try {
@@ -1260,28 +1472,28 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
                 showStatus(`❌ 应用正则表达式失败: ${error.message}`, true);
                 return;
             }
-            
+
             // 提取状态栏和正文
             const stateBarMatch = result.match(/<state_bar>.*?<\/state_bar>/s);
             const stateBarContent = stateBarMatch ? stateBarMatch[0] : '';
             const mainContent = result.replace(/<state_bar>.*?<\/state_bar>/s, '').trim();
-            
+
             console.log(`[${EXTENSION_NAME}] 提取的状态栏内容:`, stateBarContent);
             console.log(`[${EXTENSION_NAME}] 提取的正文内容:`, mainContent);
-            
+
             // 打开弹窗显示预览效果
             openPreviewPopup(stateBarContent, mainContent, demoText, result);
-            
+
             // 显示统计信息
             const matches = Array.from(demoText.matchAll(regex));
             const matchCount = matches.length;
-            
+
             if (matchCount > 0) {
                 showStatus(`✅ 预览已打开，找到 ${matchCount} 个匹配并应用了替换`);
             } else {
                 showStatus('⚠️ 预览已打开，但没有找到匹配的内容', false);
             }
-            
+
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 预览AI结果失败:`, error);
             showStatus(`❌ 预览失败: ${error.message}`, true);
@@ -1328,7 +1540,7 @@ AI助手：太好了！那我们准备一下就出发吧。`,
 
 角色：明天又会是新的开始。`
         ];
-        
+
         return randomTexts[Math.floor(Math.random() * randomTexts.length)];
     }
 
@@ -1342,30 +1554,30 @@ AI助手：太好了！那我们准备一下就出发吧。`,
             originalTextLength: originalText ? originalText.length : 0,
             fullResultLength: fullResult ? fullResult.length : 0
         });
-        
+
         // 获取AI生成的HTML美化内容
         const aiGeneratedReplacement = document.getElementById('ai-generated-replacement')?.value || '';
         console.log(`[${EXTENSION_NAME}] AI生成的HTML美化内容:`, aiGeneratedReplacement.substring(0, 200) + '...');
-        
+
         // 从 fullResult 中重新提取真实的状态栏和正文内容
         const realStateBarMatch = fullResult.match(/<state_bar>(.*?)<\/state_bar>/s);
         const realStateBarContent = realStateBarMatch ? realStateBarMatch[1] : '';
         const realMainContent = fullResult.replace(/<state_bar>.*?<\/state_bar>/s, '').trim();
-        
+
         console.log(`[${EXTENSION_NAME}] 真实状态栏内容:`, realStateBarContent);
         console.log(`[${EXTENSION_NAME}] 真实正文内容:`, realMainContent);
-        
+
         // 解析真实的状态栏内容
         const parsedStateBar = parseStateBarContent(realStateBarContent);
         console.log(`[${EXTENSION_NAME}] 解析后的状态栏HTML:`, parsedStateBar.html);
-        
+
         // 创建弹窗HTML
         const popupHtml = `
             <div class="preview-popup-container">
                 <div class="preview-popup-header">
                     <h3>🎭 预览效果</h3>
                 </div>
-                
+
                 <div class="preview-content">
                     <!-- 统一渲染区域：直接渲染AI生成的HTML美化内容 -->
                     <div class="unified-content-section">
@@ -1374,7 +1586,7 @@ AI助手：太好了！那我们准备一下就出发吧。`,
                             <!-- HTML内容将通过JavaScript动态插入 -->
                         </div>
                     </div>
-                    
+
                     <!-- 原始对比 -->
                     <div class="comparison-section">
                         <h4>🔍 效果对比</h4>
@@ -1396,7 +1608,7 @@ AI助手：太好了！那我们准备一下就出发吧。`,
                 </div>
             </div>
         `;
-        
+
         // 使用SillyTavern的弹窗系统
         if (callGenericPopup) {
             console.log(`[${EXTENSION_NAME}] 调用弹窗系统`);
@@ -1407,18 +1619,18 @@ AI助手：太好了！那我们准备一下就出发吧。`,
                 okButton: '关闭预览',
                 onOpen: () => {
                     console.log(`[${EXTENSION_NAME}] 预览弹窗已打开，开始插入HTML内容`);
-                    
+
                     // 延迟插入HTML内容，确保DOM已渲染
                     setTimeout(() => {
                         const htmlContainer = document.getElementById('html-render-container');
                         if (htmlContainer && aiGeneratedReplacement) {
                             console.log(`[${EXTENSION_NAME}] 找到HTML容器，开始插入内容`);
-                            
+
                             try {
                                 // 清理AI生成的HTML内容
                                 const cleanedHtml = cleanAIGeneratedHTML(aiGeneratedReplacement);
                                 console.log(`[${EXTENSION_NAME}] HTML内容已清理:`, cleanedHtml.substring(0, 200) + '...');
-                                
+
                                 // 使用iframe渲染完整HTML文档
                                 renderHTMLInIframe(htmlContainer, cleanedHtml);
                                 console.log(`[${EXTENSION_NAME}] HTML内容已在iframe中渲染`);
@@ -1458,10 +1670,10 @@ AI助手：太好了！那我们准备一下就出发吧。`,
      */
     function renderHTMLInIframe(container, htmlContent) {
         console.log(`[${EXTENSION_NAME}] 开始在iframe中渲染HTML`);
-        
+
         // 清空容器
         container.innerHTML = '';
-        
+
         // 创建iframe元素
         const iframe = document.createElement('iframe');
         iframe.style.width = '100%';
@@ -1470,22 +1682,22 @@ AI助手：太好了！那我们准备一下就出发吧。`,
         iframe.style.borderRadius = '8px';
         iframe.style.minHeight = '400px';
         iframe.style.backgroundColor = '#ffffff';
-        
+
         // 将iframe添加到容器
         container.appendChild(iframe);
-        
+
         // 获取iframe的document对象
         const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-        
+
         // 写入HTML内容
         iframeDoc.open();
         iframeDoc.write(htmlContent);
         iframeDoc.close();
-        
+
         // 监听iframe加载完成
         iframe.onload = () => {
             console.log(`[${EXTENSION_NAME}] iframe HTML渲染完成`);
-            
+
             // 自动调整iframe高度以适应内容
             try {
                 const iframeBody = iframe.contentDocument.body;
@@ -1496,18 +1708,18 @@ AI助手：太好了！那我们准备一下就出发吧。`,
                         iframe.contentDocument.documentElement.scrollHeight,
                         iframe.contentDocument.documentElement.offsetHeight
                     );
-                    
+
                     // 设置合理的高度范围
                     const finalHeight = Math.min(Math.max(contentHeight + 20, 200), 600);
                     iframe.style.height = finalHeight + 'px';
-                    
+
                     console.log(`[${EXTENSION_NAME}] iframe高度调整为: ${finalHeight}px`);
                 }
             } catch (error) {
                 console.warn(`[${EXTENSION_NAME}] 无法自动调整iframe高度:`, error);
             }
         };
-        
+
         console.log(`[${EXTENSION_NAME}] iframe创建并渲染完成`);
     }
 
@@ -1516,23 +1728,23 @@ AI助手：太好了！那我们准备一下就出发吧。`,
      */
     function extractBodyContent(htmlContent) {
         console.log(`[${EXTENSION_NAME}] 开始提取body内容`);
-        
+
         if (!htmlContent || typeof htmlContent !== 'string') {
             console.warn(`[${EXTENSION_NAME}] HTML内容为空或格式无效`);
             return '<div style="padding: 20px; color: #6c757d; text-align: center;">无HTML内容</div>';
         }
-        
+
         // 创建临时DOM来解析HTML
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = htmlContent;
-        
+
         // 提取样式
         let styles = '';
         const styleElements = tempDiv.querySelectorAll('style');
         styleElements.forEach(styleEl => {
             styles += styleEl.innerHTML + '\n';
         });
-        
+
         // 提取body内容
         let bodyContent = '';
         const bodyElement = tempDiv.querySelector('body');
@@ -1548,7 +1760,7 @@ AI助手：太好了！那我们准备一下就出发吧。`,
             bodyContent = tempDiv.innerHTML;
             console.log(`[${EXTENSION_NAME}] 没有找到body标签，使用整个内容`);
         }
-        
+
         // 组合样式和内容
         let result = '';
         if (styles.trim()) {
@@ -1556,7 +1768,7 @@ AI助手：太好了！那我们准备一下就出发吧。`,
             console.log(`[${EXTENSION_NAME}] 添加了提取的CSS样式`);
         }
         result += bodyContent;
-        
+
         console.log(`[${EXTENSION_NAME}] Body内容提取完成，最终长度:`, result.length);
         return result;
     }
@@ -1566,14 +1778,14 @@ AI助手：太好了！那我们准备一下就出发吧。`,
      */
     function cleanAIGeneratedHTML(htmlContent) {
         console.log(`[${EXTENSION_NAME}] 开始清理HTML内容`);
-        
+
         if (!htmlContent || typeof htmlContent !== 'string') {
             console.warn(`[${EXTENSION_NAME}] HTML内容为空或格式无效`);
             return '';
         }
-        
+
         let cleaned = htmlContent.trim();
-        
+
         // 首先，分离HTML代码和正文内容
         // 查找HTML结束标签后的正文内容
         const htmlEndMatch = cleaned.match(/<\/html>\s*(.+)$/s);
@@ -1584,7 +1796,7 @@ AI助手：太好了！那我们准备一下就出发吧。`,
             cleaned = cleaned.replace(/<\/html>\s*(.+)$/s, '</html>');
             console.log(`[${EXTENSION_NAME}] 发现并分离了HTML后的正文内容:`, separatedText.substring(0, 100) + '...');
         }
-        
+
         // 查找DOCTYPE声明的开始
         const doctypeIndex = cleaned.search(/<!DOCTYPE\s+html/i);
         if (doctypeIndex > 0) {
@@ -1617,7 +1829,7 @@ ${bodyMatch[1]}
                 }
             }
         }
-        
+
         // 查找HTML结束标签
         const htmlEndIndex = cleaned.lastIndexOf('</html>');
         if (htmlEndIndex !== -1) {
@@ -1632,16 +1844,16 @@ ${bodyMatch[1]}
             }
             console.log(`[${EXTENSION_NAME}] 自动补全了HTML结构`);
         }
-        
+
         // 移除可能的代码块标记
         cleaned = cleaned.replace(/^```html\s*/i, '').replace(/\s*```$/, '');
-        
+
         // 移除JavaScript代码（出于安全考虑）
         cleaned = cleaned.replace(/<script[\s\S]*?<\/script>/gi, '');
-        
+
         console.log(`[${EXTENSION_NAME}] HTML清理完成，最终长度:`, cleaned.length);
         console.log(`[${EXTENSION_NAME}] 清理后的HTML预览:`, cleaned.substring(0, 200) + '...');
-        
+
         return cleaned;
     }
 
@@ -1659,15 +1871,15 @@ ${bodyMatch[1]}
      */
     function parseStateBarContent(stateBarContent) {
         console.log(`[${EXTENSION_NAME}] 解析状态栏内容:`, stateBarContent);
-        
+
         if (!stateBarContent || stateBarContent.trim() === '') {
             console.log(`[${EXTENSION_NAME}] 状态栏内容为空`);
             return { html: '<div class="no-status-bar">无状态栏内容</div>' };
         }
-        
+
         let html = '<div class="status-bar-container">';
         let foundAnyItem = false;
-        
+
         // 定义所有支持的状态栏标签及其图标
         const statusTags = [
             { tag: '角色', icon: '👤', class: 'name-item' },
@@ -1690,10 +1902,10 @@ ${bodyMatch[1]}
             { tag: '魔力', icon: '🔮', class: 'mp-item' },
             { tag: '法力值', icon: '🔮', class: 'mp-item' }
         ];
-        
+
         // 创建主要信息区域
         html += '<div class="main-status-items">';
-        
+
         // 解析各种状态标签
         statusTags.forEach(({ tag, icon, class: className }) => {
             const regex = new RegExp(`<${tag}>(.*?)<\/${tag}>`, 'g');
@@ -1709,9 +1921,9 @@ ${bodyMatch[1]}
                 console.log(`[${EXTENSION_NAME}] 找到${tag}:`, content);
             }
         });
-        
+
         html += '</div>';
-        
+
         // 解析选项标签
         const optionMatches = stateBarContent.match(/<Options_\d+>(.*?)<\/Options_\d+>/g);
         if (optionMatches && optionMatches.length > 0) {
@@ -1727,9 +1939,9 @@ ${bodyMatch[1]}
             html += '</div></div>';
             console.log(`[${EXTENSION_NAME}] 找到 ${optionMatches.length} 个选项`);
         }
-        
+
         html += '</div>';
-        
+
         // 如果没有找到任何标准标签，显示原始内容
         if (!foundAnyItem) {
             console.log(`[${EXTENSION_NAME}] 未找到标准标签，显示原始内容`);
@@ -1740,7 +1952,7 @@ ${bodyMatch[1]}
                 </div>
             `;
         }
-        
+
         console.log(`[${EXTENSION_NAME}] 最终状态栏HTML:`, html);
         return { html };
     }
@@ -1752,14 +1964,14 @@ ${bodyMatch[1]}
         if (!content.trim()) {
             return '<div class="empty-content">正文内容为空</div>';
         }
-        
+
         // 简单的格式化：处理换行和对话
         return content
             .split('\n')
             .map(line => {
                 const trimmed = line.trim();
                 if (!trimmed) return '<br>';
-                
+
                 // 检查是否是对话格式
                 if (trimmed.includes('：') || trimmed.includes(':')) {
                     const parts = trimmed.split(/：|:/);
@@ -1772,7 +1984,7 @@ ${bodyMatch[1]}
                         </div>`;
                     }
                 }
-                
+
                 return `<div class="text-line">${trimmed}</div>`;
             })
             .join('');
@@ -1783,38 +1995,38 @@ ${bodyMatch[1]}
      */
     function applyAIResult() {
         console.log(`[${EXTENSION_NAME}] 应用AI生成的结果`);
-        
+
         try {
             const aiPattern = document.getElementById('ai-generated-pattern')?.value || '';
             const aiReplacement = document.getElementById('ai-generated-replacement')?.value || '';
-            
+
             if (!aiPattern) {
                 showStatus('❌ 没有AI生成的正则表达式可以应用', true);
                 return;
             }
-            
+
             // 切换到手动创建页面
             switchToPage('manual');
-            
+
             // 填充到手动创建页面的表单
             const manualPattern = document.getElementById('regex-pattern');
             const manualReplacement = document.getElementById('regex-replacement');
-            
+
             if (manualPattern) {
                 manualPattern.value = aiPattern;
             }
             if (manualReplacement) {
                 manualReplacement.value = aiReplacement;
             }
-            
+
             // 触发验证
             if (manualPattern) {
                 const event = new Event('input', { bubbles: true });
                 manualPattern.dispatchEvent(event);
             }
-            
+
             showStatus('✅ AI生成的结果已应用到手动创建页面');
-            
+
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 应用AI结果失败:`, error);
             showStatus(`❌ 应用失败: ${error.message}`, true);
@@ -1826,32 +2038,32 @@ ${bodyMatch[1]}
      */
     function switchToPage(pageId) {
         console.log(`[${EXTENSION_NAME}] 切换到页面: ${pageId}`);
-        
+
         // 隐藏所有页面
         const pages = document.querySelectorAll('.page-content');
         pages.forEach(page => {
             page.style.display = 'none';
             page.classList.remove('active');
         });
-        
+
         // 显示目标页面
         const targetPage = document.getElementById(`page-${pageId}`);
         if (targetPage) {
             targetPage.style.display = 'block';
             targetPage.classList.add('active');
         }
-        
+
         // 更新标签状态
         const tabs = document.querySelectorAll('.tab-button');
         tabs.forEach(tab => {
             tab.classList.remove('active');
         });
-        
+
         const targetTab = document.getElementById(`tab-${pageId}`);
         if (targetTab) {
             targetTab.classList.add('active');
         }
-        
+
         // 保存AI设置（如果在AI页面）
         if (pageId === 'ai') {
             saveAISettings();
@@ -1869,14 +2081,14 @@ ${bodyMatch[1]}
             const customUrl = document.getElementById('custom-api-url')?.value;
             const customKey = document.getElementById('custom-api-key')?.value;
             const customModel = document.getElementById('custom-model')?.value;
-            
+
             if (provider) extensionSettings.aiProvider = provider;
             if (geminiKey) extensionSettings.geminiApiKey = geminiKey;
             if (geminiModel) extensionSettings.defaultModel = geminiModel;
             if (customUrl) extensionSettings.customApiUrl = customUrl;
             if (customKey) extensionSettings.customApiKey = customKey;
             if (customModel) extensionSettings.customModel = customModel;
-            
+
             saveSettings();
             console.log(`[${EXTENSION_NAME}] AI设置已保存`);
         } catch (error) {
@@ -1885,11 +2097,125 @@ ${bodyMatch[1]}
     }
 
     /**
+     * 显示对话历史
+     */
+    function showConversationHistory() {
+        console.log(`[${EXTENSION_NAME}] 显示对话历史`);
+
+        try {
+            const history = conversationHistory.getHistory();
+
+            if (history.length === 0) {
+                showStatus('📝 暂无对话历史记录');
+                return;
+            }
+
+            // 构建历史对话显示内容
+            let historyHtml = `
+                <div class="conversation-history-display">
+                    <h4>💬 对话历史 (共${history.length}条)</h4>
+                    <div class="history-list">
+            `;
+
+            history.forEach((entry, index) => {
+                const date = new Date(entry.timestamp).toLocaleString('zh-CN');
+                historyHtml += `
+                    <div class="history-item">
+                        <div class="history-header">
+                            <span class="history-index">#${index + 1}</span>
+                            <span class="history-time">${date}</span>
+                        </div>
+                        <div class="history-content">
+                            <div class="user-prompt">
+                                <strong>👤 用户：</strong>
+                                <div class="prompt-text">${escapeHtml(entry.userPrompt)}</div>
+                            </div>
+                            <div class="ai-response">
+                                <strong>🤖 AI：</strong>
+                                <div class="response-text">${escapeHtml(entry.aiResponse.substring(0, 200))}${entry.aiResponse.length > 200 ? '...' : ''}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            historyHtml += `
+                    </div>
+                </div>
+            `;
+
+            // 使用弹窗显示历史记录
+            if (callGenericPopup) {
+                callGenericPopup(historyHtml, POPUP_TYPE.TEXT, '', {
+                    wide: true,
+                    large: true,
+                    allowVerticalScrolling: true,
+                    okButton: '关闭'
+                });
+            }
+
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 显示对话历史失败:`, error);
+            showStatus('❌ 显示对话历史失败', true);
+        }
+    }
+
+    /**
+     * 清空对话历史
+     */
+    function clearConversationHistory() {
+        console.log(`[${EXTENSION_NAME}] 清空对话历史`);
+
+        try {
+            const history = conversationHistory.getHistory();
+
+            if (history.length === 0) {
+                showStatus('📝 暂无对话历史记录');
+                return;
+            }
+
+            // 确认清空
+            if (callGenericPopup) {
+                callGenericPopup(
+                    `确定要清空所有对话历史吗？这将删除${history.length}条历史记录，此操作无法撤销。`,
+                    POPUP_TYPE.CONFIRM,
+                    '',
+                    {
+                        okButton: '确认清空',
+                        cancelButton: '取消'
+                    }
+                ).then(result => {
+                    if (result) {
+                        conversationHistory.clearHistory();
+                        showStatus('✅ 对话历史已清空');
+
+                        // 更新历史计数显示
+                        const historyCount = document.querySelector('.history-count');
+                        if (historyCount) {
+                            historyCount.textContent = `历史对话: 0条`;
+                        }
+
+                        // 清空AI提示输入框
+                        const aiPrompt = document.getElementById('ai-prompt');
+                        if (aiPrompt) {
+                            aiPrompt.value = '';
+                        }
+                    }
+                });
+            }
+
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 清空对话历史失败:`, error);
+            showStatus('❌ 清空对话历史失败', true);
+        }
+    }
+
+    /**
      * 绑定模态框事件
      */
     function bindModalEvents() {
         console.log(`[${EXTENSION_NAME}] 开始绑定模态框事件`);
-        
+
         // === 页面切换事件 ===
         const tabButtons = document.querySelectorAll('.tab-button');
         tabButtons.forEach(button => {
@@ -1909,7 +2235,7 @@ ${bodyMatch[1]}
                 const provider = providerSelect.value;
                 const geminiConfig = document.getElementById('gemini-config');
                 const customConfig = document.getElementById('custom-config');
-                
+
                 if (provider === 'gemini') {
                     if (geminiConfig) geminiConfig.style.display = 'block';
                     if (customConfig) customConfig.style.display = 'none';
@@ -1917,7 +2243,7 @@ ${bodyMatch[1]}
                     if (geminiConfig) geminiConfig.style.display = 'none';
                     if (customConfig) customConfig.style.display = 'block';
                 }
-                
+
                 // 保存设置
                 saveAISettings();
             });
@@ -1941,12 +2267,24 @@ ${bodyMatch[1]}
             previewBtn.addEventListener('click', previewAIResult);
         }
 
+        // 查看对话历史按钮
+        const viewHistoryBtn = document.getElementById('view-conversation-history');
+        if (viewHistoryBtn) {
+            viewHistoryBtn.addEventListener('click', showConversationHistory);
+        }
+
+        // 清空对话历史按钮
+        const clearHistoryBtn = document.getElementById('clear-conversation-history');
+        if (clearHistoryBtn) {
+            clearHistoryBtn.addEventListener('click', clearConversationHistory);
+        }
+
         // AI配置字段自动保存
         const aiConfigFields = [
             'gemini-api-key', 'gemini-model',
             'custom-api-url', 'custom-api-key', 'custom-model'
         ];
-        
+
         aiConfigFields.forEach(fieldId => {
             const field = document.getElementById(fieldId);
             if (field) {
@@ -1959,7 +2297,7 @@ ${bodyMatch[1]}
         // 实时验证正则表达式
         const patternInput = document.getElementById('regex-pattern');
         const flagsSelect = document.getElementById('regex-flags');
-        
+
         if (patternInput && extensionSettings.autoValidate) {
             patternInput.addEventListener('input', () => {
                 const pattern = patternInput.value;
@@ -1982,7 +2320,7 @@ ${bodyMatch[1]}
         if (extensionSettings.showPreview) {
             const testTextArea = document.getElementById('test-text');
             const replacementArea = document.getElementById('regex-replacement');
-            
+
             [testTextArea, replacementArea].forEach(element => {
                 if (element) {
                     element.addEventListener('input', updatePreview);
@@ -2006,7 +2344,7 @@ ${bodyMatch[1]}
         console.log(`[${EXTENSION_NAME}] handleInsertRegexWithData 开始执行`);
         console.log(`[${EXTENSION_NAME}] 表单数据:`, formData);
         console.log(`[${EXTENSION_NAME}] 角色信息:`, characterInfo);
-        
+
         try {
             // 1. 验证角色信息
             if (!characterInfo) {
@@ -2015,7 +2353,7 @@ ${bodyMatch[1]}
 
             // 2. 验证表单数据（最小化验证，允许用户输入各种内容）
             const { scriptName, pattern, replacement, flags, affects } = formData;
-            
+
             // 只做基本的存在性检查，不检查内容是否为"空"
             if (scriptName === undefined || scriptName === null) {
                 throw new Error('脚本名称不能为undefined');
@@ -2036,7 +2374,7 @@ ${bodyMatch[1]}
             console.log(`[${EXTENSION_NAME}] 创建正则脚本对象`);
             const regexScript = createRegexScript(scriptName, pattern, replacement);
             console.log(`[${EXTENSION_NAME}] 基础脚本对象:`, regexScript);
-            
+
             // 5. 设置影响范围
             console.log(`[${EXTENSION_NAME}] 设置影响范围 (${affects})`);
             switch (affects) {
@@ -2058,7 +2396,7 @@ ${bodyMatch[1]}
             console.log(`[${EXTENSION_NAME}] 保存正则脚本到角色`);
             await saveRegexScriptToCharacter(regexScript);
             console.log(`[${EXTENSION_NAME}] 正则脚本保存成功`);
-            
+
             // 7. 保存用户偏好
             if (extensionSettings.rememberLastValues) {
                 console.log(`[${EXTENSION_NAME}] 保存用户输入偏好`);
@@ -2071,7 +2409,7 @@ ${bodyMatch[1]}
 
             // 8. 显示成功状态
             console.log(`[${EXTENSION_NAME}] 显示成功状态`);
-            
+
             // 显示成功提示
             if (toastr) {
                 toastr.success(`正则脚本 "${scriptName}" 已添加到 ${characterInfo.name}`, '成功');
@@ -2082,15 +2420,15 @@ ${bodyMatch[1]}
 
             console.log(`[${EXTENSION_NAME}] 插入正则表达式流程完成，返回成功`);
             return true;
-            
+
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 插入正则表达式失败:`, error);
             console.error(`[${EXTENSION_NAME}] 错误堆栈:`, error.stack);
-            
+
             if (toastr) {
                 toastr.error(`保存失败: ${error.message}`, '错误');
             }
-            
+
             return false;
         }
     }
@@ -2100,10 +2438,10 @@ ${bodyMatch[1]}
      */
     async function openQuickRegexModal() {
         console.log(`[${EXTENSION_NAME}] openQuickRegexModal 被调用`);
-        
+
         // 用于存储表单数据的变量
         let formData = null;
-        
+
         try {
             // 1. 检查弹窗模块
             console.log(`[${EXTENSION_NAME}] 检查弹窗模块可用性`);
@@ -2138,16 +2476,16 @@ ${bodyMatch[1]}
                 }] : [],
                 onOpen: () => {
                     console.log(`[${EXTENSION_NAME}] 模态框已打开`);
-                    
+
                     // 延迟绑定事件，确保DOM已完全渲染
                     setTimeout(() => {
                         console.log(`[${EXTENSION_NAME}] 开始绑定模态框事件`);
-                        
+
                         // 检查模态框DOM结构
                         console.log(`[${EXTENSION_NAME}] 检查模态框DOM结构`);
                         const modalContainer = document.querySelector('#quick-regex-modal');
                         console.log(`[${EXTENSION_NAME}] 模态框容器:`, modalContainer ? '找到' : '未找到');
-                        
+
                         if (modalContainer) {
                             const allInputs = modalContainer.querySelectorAll('input, select, textarea');
                             console.log(`[${EXTENSION_NAME}] 模态框中找到 ${allInputs.length} 个表单元素`);
@@ -2169,13 +2507,13 @@ ${bodyMatch[1]}
                                 patternEl: patternEl ? '存在' : '不存在'
                             });
                         }
-                        
+
                         bindModalEvents();
                     }, 100);
                 },
                 onClosing: (popup) => {
                     console.log(`[${EXTENSION_NAME}] 模态框即将关闭，获取表单数据`);
-                    
+
                     // 在模态框关闭前获取表单数据
                     try {
                         const scriptNameElement = document.getElementById('regex-script-name');
@@ -2183,7 +2521,7 @@ ${bodyMatch[1]}
                         const replacementElement = document.getElementById('regex-replacement');
                         const flagsElement = document.getElementById('regex-flags');
                         const affectsElement = document.getElementById('regex-affects');
-                        
+
                         if (scriptNameElement && patternElement) {
                             formData = {
                                 scriptName: scriptNameElement.value, // 不做trim，保持原始内容
@@ -2192,7 +2530,7 @@ ${bodyMatch[1]}
                                 flags: flagsElement?.value || 'g',
                                 affects: affectsElement?.value || 'both'
                             };
-                            
+
                             console.log(`[${EXTENSION_NAME}] 成功获取表单数据:`, {
                                 scriptName: `"${formData.scriptName}"`,
                                 pattern: `"${formData.pattern}"`,
@@ -2211,7 +2549,7 @@ ${bodyMatch[1]}
                         console.error(`[${EXTENSION_NAME}] 获取表单数据时出错:`, error);
                         formData = null;
                     }
-                    
+
                     return true; // 允许模态框关闭
                 }
             });
@@ -2220,7 +2558,7 @@ ${bodyMatch[1]}
             console.log(`[${EXTENSION_NAME}] 模态框返回结果:`, result);
             console.log(`[${EXTENSION_NAME}] POPUP_RESULT.AFFIRMATIVE:`, POPUP_RESULT.AFFIRMATIVE);
             console.log(`[${EXTENSION_NAME}] 获取的表单数据:`, formData);
-            
+
             if (result === POPUP_RESULT.AFFIRMATIVE && formData) {
                 console.log(`[${EXTENSION_NAME}] 用户点击了确认按钮，开始处理插入正则`);
                 const success = await handleInsertRegexWithData(formData, characterInfo);
@@ -2275,7 +2613,7 @@ ${bodyMatch[1]}
                         </label>
                         <br>
                         <div class="quick-regex-action">
-                            <button id="${EXTENSION_NAME}-open-tool" class="menu_button" 
+                            <button id="${EXTENSION_NAME}-open-tool" class="menu_button"
                                     ${!extensionSettings.enabled ? 'disabled' : ''}>
                                 <i class="fa-solid fa-magic"></i>
                                 <span>打开快速正则工具</span>
@@ -2294,7 +2632,7 @@ ${bodyMatch[1]}
         $(`#${EXTENSION_NAME}-enabled`).on('change', function() {
             extensionSettings.enabled = $(this).prop('checked');
             saveSettings();
-            
+
             const button = $(`#${EXTENSION_NAME}-open-tool`);
             if (extensionSettings.enabled) {
                 button.prop('disabled', false);
@@ -2369,16 +2707,16 @@ ${bodyMatch[1]}
 
             // 加载设置
             loadSettings();
-            
+
             // 创建用户界面
             createUI();
-            
+
             // 注册斜杠命令
             registerSlashCommands();
-            
+
             isInitialized = true;
             console.log(`[${EXTENSION_NAME}] 扩展初始化完成`);
-            
+
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 初始化失败:`, error);
         }

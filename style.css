@@ -1928,3 +1928,200 @@ select.form-control {
     text-rendering: optimizeLegibility !important;
 }
 
+/* === 对话历史管理控件样式 === */
+.conversation-history-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+    margin: 10px 0;
+    padding: 15px;
+    background: var(--st-bg-secondary) !important;
+    border: 1px solid var(--st-border) !important;
+    border-radius: 8px !important;
+}
+
+.ai-history-btn, .ai-clear-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ai-history-btn {
+    background: linear-gradient(135deg, var(--st-accent-blue), #3182ce) !important;
+    color: white !important;
+    box-shadow: 0 2px 8px rgba(66, 153, 225, 0.3);
+}
+
+.ai-history-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(66, 153, 225, 0.4);
+}
+
+.ai-clear-btn {
+    background: linear-gradient(135deg, var(--st-accent-red), #e53e3e) !important;
+    color: white !important;
+    box-shadow: 0 2px 8px rgba(245, 101, 101, 0.3);
+}
+
+.ai-clear-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 101, 101, 0.4);
+}
+
+.history-count {
+    font-size: 12px;
+    color: var(--st-text-secondary) !important;
+    font-weight: 500;
+    background: var(--st-bg-tertiary) !important;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--st-border) !important;
+}
+
+/* === 对话历史显示弹窗样式 === */
+.conversation-history-display {
+    max-width: 800px;
+    max-height: 70vh;
+    overflow-y: auto;
+    font-family: var(--mainFontFamily, 'Segoe UI', system-ui, sans-serif);
+}
+
+.conversation-history-display h4 {
+    margin: 0 0 20px 0;
+    color: var(--st-text-primary) !important;
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--st-border) !important;
+}
+
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.history-item {
+    background: var(--st-bg-secondary) !important;
+    border: 1px solid var(--st-border) !important;
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+}
+
+.history-item:hover {
+    background: var(--st-bg-tertiary) !important;
+    border-color: var(--st-border-hover) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--st-border) !important;
+}
+
+.history-index {
+    background: var(--st-accent-blue) !important;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.history-time {
+    color: var(--st-text-muted) !important;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.history-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.user-prompt, .ai-response {
+    padding: 10px;
+    border-radius: 8px;
+    border-left: 4px solid var(--st-accent-blue);
+}
+
+.user-prompt {
+    background: rgba(66, 153, 225, 0.1) !important;
+    border-left-color: var(--st-accent-blue) !important;
+}
+
+.ai-response {
+    background: rgba(72, 187, 120, 0.1) !important;
+    border-left-color: var(--st-accent-green) !important;
+}
+
+.user-prompt strong {
+    color: var(--st-accent-blue) !important;
+    font-weight: 600;
+}
+
+.ai-response strong {
+    color: var(--st-accent-green) !important;
+    font-weight: 600;
+}
+
+.prompt-text, .response-text {
+    margin-top: 5px;
+    color: var(--st-text-primary) !important;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 13px;
+}
+
+/* 移动端对话历史适配 */
+@media (max-width: 768px) {
+    .conversation-history-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+    
+    .ai-history-btn, .ai-clear-btn {
+        justify-content: center;
+        padding: 10px 16px;
+    }
+    
+    .history-count {
+        text-align: center;
+    }
+    
+    .conversation-history-display {
+        max-width: 95vw;
+        padding: 10px;
+    }
+    
+    .history-header {
+        flex-direction: column;
+        gap: 5px;
+        text-align: center;
+    }
+    
+    .history-item {
+        padding: 12px;
+    }
+}
+
