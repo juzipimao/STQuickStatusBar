@@ -525,7 +525,7 @@ input[type="password"].form-control {
         padding-bottom: 10px;
     }
 
-    /* 移动端标签按钮特殊处理 */
+    /* 移动端标签按钮特殊处理 - 增强版 */
     .tab-button {
         border-radius: 8px !important;
         top: 0 !important;
@@ -542,17 +542,36 @@ input[type="password"].form-control {
         backdrop-filter: none !important;
         overflow: visible !important;
         /* 增强触摸目标大小 */
-        min-height: 44px !important;
+        min-height: 48px !important;
         min-width: 120px !important;
         /* 触摸反馈 */
-        transition: all 0.1s ease !important;
+        transition: all 0.15s ease !important;
+        /* 确保元素可见性 */
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        /* 防止用户选择 */
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        -moz-user-select: none !important;
+        /* 改善触摸响应 */
+        pointer-events: auto !important;
     }
 
-    /* 移动端触摸时的视觉反馈 */
+    /* 移动端触摸时的视觉反馈 - 增强版 */
     .tab-button:active {
         background: var(--st-accent-blue) !important;
         color: white !important;
-        transform: scale(0.98) !important;
+        transform: scale(0.95) !important;
+        box-shadow: 0 2px 8px rgba(66, 153, 225, 0.4) !important;
+    }
+
+    /* 移动端触摸状态保持 */
+    .tab-button[data-mobile="true"]:active {
+        background: var(--st-accent-blue, #4299e1) !important;
+        color: white !important;
+        transform: scale(0.95) !important;
+        transition: all 0.1s ease !important;
     }
 
     /* 移动端移除动画伪元素 */

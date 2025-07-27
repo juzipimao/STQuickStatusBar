@@ -568,7 +568,11 @@
      * 创建模态框HTML内容
      */
     function createModalContent(characterInfo) {
-        return `
+        console.log(`[${EXTENSION_NAME}] 创建模态框内容，内容长度检查开始`);
+        const isMobile = isMobileDevice();
+        console.log(`[${EXTENSION_NAME}] 设备类型: ${isMobile ? '移动设备' : '桌面设备'}`);
+        
+        const modalContent = `
             <div id="quick-regex-modal" class="quick-regex-container">
                 <div class="quick-regex-header">
                     <h3>📝 ${EXTENSION_DISPLAY_NAME}</h3>
@@ -581,10 +585,10 @@
 
                     <!-- 页面切换标签 -->
                     <div class="page-tabs">
-                        <button id="tab-manual" class="tab-button active" data-page="manual">
+                        <button id="tab-manual" class="tab-button active" data-page="manual"${isMobile ? ' data-mobile="true"' : ''}>
                             🔧 手动创建
                         </button>
-                        <button id="tab-ai" class="tab-button" data-page="ai">
+                        <button id="tab-ai" class="tab-button" data-page="ai"${isMobile ? ' data-mobile="true"' : ''}>
                             🤖 AI生成
                         </button>
                     </div>
@@ -786,6 +790,12 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
                 </div>
             </div>
         `;
+        
+        console.log(`[${EXTENSION_NAME}] 模态框内容创建完成，总长度: ${modalContent.length}`);
+        console.log(`[${EXTENSION_NAME}] 包含标签按钮: ${modalContent.includes('tab-button') ? '是' : '否'}`);
+        console.log(`[${EXTENSION_NAME}] 移动端标记: ${modalContent.includes('data-mobile') ? '是' : '否'}`);
+        
+        return modalContent;
     }
 
     /**
@@ -2410,57 +2420,87 @@ ${bodyMatch[1]}
         const tabButtons = document.querySelectorAll('.tab-button');
         const isMobile = isMobileDevice();
         console.log(`[${EXTENSION_NAME}] 检测到设备类型: ${isMobile ? '移动设备' : '桌面设备'}`);
+        console.log(`[${EXTENSION_NAME}] 找到 ${tabButtons.length} 个标签按钮`);
 
         tabButtons.forEach((button, index) => {
-            console.log(`[${EXTENSION_NAME}] 绑定第${index + 1}个标签按钮事件: ${button.getAttribute('data-page')}`);
+            const pageId = button.getAttribute('data-page');
+            const isMobileButton = button.getAttribute('data-mobile') === 'true';
+            console.log(`[${EXTENSION_NAME}] 绑定第${index + 1}个标签按钮: ${pageId}, 移动标记: ${isMobileButton}`);
 
             if (isMobile) {
                 // 移动设备：优先使用触摸事件，同时保留点击事件作为后备
                 let touchStarted = false;
+                let touchStartTime = 0;
 
+                // 触摸开始
                 button.addEventListener('touchstart', (e) => {
-                    console.log(`[${EXTENSION_NAME}] 触摸开始: ${button.getAttribute('data-page')}`);
+                    console.log(`[${EXTENSION_NAME}] 移动端触摸开始: ${pageId}`);
                     touchStarted = true;
+                    touchStartTime = Date.now();
+                    
+                    // 添加视觉反馈
+                    button.style.transform = 'scale(0.95)';
+                    button.style.backgroundColor = 'var(--st-accent-blue, #4299e1)';
+                    
                     e.preventDefault(); // 防止触发点击事件
                 }, { passive: false });
 
+                // 触摸结束
                 button.addEventListener('touchend', (e) => {
-                    console.log(`[${EXTENSION_NAME}] 触摸结束: ${button.getAttribute('data-page')}`);
+                    console.log(`[${EXTENSION_NAME}] 移动端触摸结束: ${pageId}`);
+                    
+                    // 恢复视觉效果
+                    button.style.transform = '';
+                    button.style.backgroundColor = '';
+                    
                     if (touchStarted) {
-                        const pageId = button.getAttribute('data-page');
-                        if (pageId) {
+                        const touchDuration = Date.now() - touchStartTime;
+                        console.log(`[${EXTENSION_NAME}] 触摸持续时间: ${touchDuration}ms`);
+                        
+                        // 只有在短按(小于500ms)情况下才处理为点击
+                        if (touchDuration < 500 && pageId) {
                             console.log(`[${EXTENSION_NAME}] 通过触摸切换到页面: ${pageId}`);
-                            switchToPage(pageId);
+                            
+                            // 延迟执行，确保视觉反馈完成
+                            setTimeout(() => {
+                                switchToPage(pageId);
+                            }, 50);
                         }
+                        
                         touchStarted = false;
                         e.preventDefault(); // 防止触发点击事件
                     }
                 }, { passive: false });
 
+                // 触摸取消
                 button.addEventListener('touchcancel', () => {
-                    console.log(`[${EXTENSION_NAME}] 触摸取消: ${button.getAttribute('data-page')}`);
+                    console.log(`[${EXTENSION_NAME}] 移动端触摸取消: ${pageId}`);
                     touchStarted = false;
+                    
+                    // 恢复视觉效果
+                    button.style.transform = '';
+                    button.style.backgroundColor = '';
                 });
 
                 // 添加点击事件作为后备（对于某些移动浏览器）
                 button.addEventListener('click', (e) => {
-                    if (!touchStarted) { // 只有在没有触摸事件时才处理点击
-                        console.log(`[${EXTENSION_NAME}] 移动端点击后备: ${button.getAttribute('data-page')}`);
-                        const pageId = button.getAttribute('data-page');
-                        if (pageId) {
-                            switchToPage(pageId);
-                        }
+                    console.log(`[${EXTENSION_NAME}] 移动端点击后备触发: ${pageId}, touchStarted: ${touchStarted}`);
+                    
+                    if (!touchStarted && pageId) { // 只有在没有触摸事件时才处理点击
+                        console.log(`[${EXTENSION_NAME}] 移动端点击后备切换: ${pageId}`);
+                        switchToPage(pageId);
                     }
                     e.preventDefault();
                 });
+                
             } else {
                 // 桌面设备：使用标准点击事件
-                button.addEventListener('click', () => {
-                    const pageId = button.getAttribute('data-page');
+                button.addEventListener('click', (e) => {
                     console.log(`[${EXTENSION_NAME}] 桌面端点击切换到页面: ${pageId}`);
                     if (pageId) {
                         switchToPage(pageId);
                     }
+                    e.preventDefault();
                 });
             }
         });
