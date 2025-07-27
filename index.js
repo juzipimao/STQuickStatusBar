@@ -700,21 +700,21 @@
         const toolsContent = `
             <div id="quick-regex-tools" class="quick-regex-container">
                 <div class="quick-regex-header">
-                    <h4>🛠️ 快速正则工具</h4>
+                    <h4>快速正则工具</h4>
                     ${characterInfo ? `
                         <div class="character-info">
                             <img src="/characters/${characterInfo.avatar}" alt="${characterInfo.name}" class="character-avatar">
                             <span class="character-name">当前角色: ${characterInfo.name}</span>
                         </div>
-                    ` : '<div class="no-character">⚠️ 未选择角色</div>'}
+                    ` : '<div class="no-character">未选择角色</div>'}
 
                     <!-- 页面切换标签 -->
                     <div class="page-tabs">
                         <button id="tab-manual" class="tab-button active" data-page="manual"${isMobile ? ' data-mobile="true"' : ''}>
-                            🔧 手动创建
+                            手动创建
                         </button>
                         <button id="tab-ai" class="tab-button" data-page="ai"${isMobile ? ' data-mobile="true"' : ''}>
-                            🤖 AI生成
+                            AI生成
                         </button>
                     </div>
                 </div>
@@ -776,7 +776,7 @@
 
                         <div class="form-group">
                             <button id="insert-regex-btn" class="ai-apply-btn">
-                                ✅ 插入正则表达式
+                                插入正则表达式
                             </button>
                         </div>
                     </div>
@@ -846,10 +846,10 @@
                         <div class="form-group">
                             <div class="conversation-history-controls">
                                 <button id="view-conversation-history" class="ai-history-btn" type="button">
-                                    📚 查看对话历史
+                                    查看对话历史
                                 </button>
                                 <button id="clear-conversation-history" class="ai-clear-btn" type="button">
-                                    🗑️ 清空历史
+                                    清空历史
                                 </button>
                                 <span class="history-count">历史对话: ${conversationHistory.getHistory().length}条</span>
                             </div>
@@ -858,7 +858,7 @@
                         <!-- 生成按钮 -->
                         <div class="form-group">
                             <button id="generate-regex" class="ai-generate-btn">
-                                🤖 生成正则表达式
+                                生成正则表达式
                             </button>
                         </div>
 
@@ -890,7 +890,7 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 
                             <div class="form-group">
                                 <button id="preview-ai-result" class="ai-preview-btn">
-                                    👁️ 预览应用效果
+                                    预览应用效果
                                 </button>
                             </div>
 
@@ -902,7 +902,7 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 
                             <div class="form-group">
                                 <button id="apply-ai-result" class="ai-apply-btn">
-                                    ✅ 应用到手动创建页面
+                                    应用到手动创建页面
                                 </button>
                             </div>
                         </div>
@@ -1581,7 +1581,7 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
             // 显示生成中状态
             const generateBtn = document.getElementById('generate-regex');
             const originalText = generateBtn.textContent;
-            generateBtn.textContent = '🔄 生成中...';
+            generateBtn.textContent = '生成中...';
             generateBtn.disabled = true;
 
             let responseText = '';
@@ -1652,7 +1652,7 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
             // 恢复按钮状态
             const generateBtn = document.getElementById('generate-regex');
             if (generateBtn) {
-                generateBtn.textContent = '🤖 生成正则表达式';
+                generateBtn.textContent = '生成正则表达式';
                 generateBtn.disabled = false;
             }
         }
@@ -1711,9 +1711,9 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
             const matchCount = matches.length;
 
             if (matchCount > 0) {
-                showStatus(`✅ 内联预览已显示，找到 ${matchCount} 个匹配并应用了替换`);
+                showStatus('预览已显示，找到 ${matchCount} 个匹配并应用了替换');
             } else {
-                showStatus('⚠️ 内联预览已显示，但没有找到匹配的内容', false);
+                showStatus('内联预览已显示，但没有找到匹配的内容', false);
             }
 
         } catch (error) {
@@ -1775,10 +1775,10 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
         // 创建预览HTML结构
         inlineContainer.innerHTML = `
             <div class="inline-preview-header">
-                <h4>🎭 预览效果</h4>
+                <h4>预览效果</h4>
                 <div class="inline-preview-controls">
                     <button id="toggle-preview-mode" class="preview-control-btn" title="切换预览模式">
-                        📱 HTML渲染
+                        HTML渲染
                     </button>
                     <button id="close-inline-preview" class="preview-close-btn" title="关闭预览">
                         ✕
@@ -1790,8 +1790,8 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
                 <!-- 渲染效果区域 -->
                 <div class="preview-render-section" id="preview-render-section">
                     <div class="preview-mode-tabs">
-                        <button class="preview-tab active" data-mode="html">📱 HTML渲染</button>
-                        <button class="preview-tab" data-mode="text">📝 文本对比</button>
+                        <button class="preview-tab active" data-mode="html">HTML渲染</button>
+                        <button class="preview-tab" data-mode="text">文本对比</button>
                     </div>
                     
                     <!-- HTML渲染模式 -->
@@ -1805,13 +1805,13 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
                     <div class="preview-mode-content" id="text-preview-mode">
                         <div class="text-comparison-grid">
                             <div class="before-column">
-                                <h5>🔍 应用前：</h5>
+                                <h5>应用前：</h5>
                                 <div class="text-display-container">
                                     <pre class="text-display" id="before-text-display"></pre>
                                 </div>
                             </div>
                             <div class="after-column">
-                                <h5>✅ 应用后：</h5>
+                                <h5>应用后：</h5>
                                 <div class="text-display-container">
                                     <pre class="text-display" id="after-text-display"></pre>
                                 </div>
@@ -2111,7 +2111,7 @@ AI助手：太好了！那我们准备一下就出发吧。`,
         const popupHtml = `
             <div class="preview-popup-container">
                 <div class="preview-popup-header">
-                    <h3>🎭 预览效果</h3>
+                    <h3>预览效果</h3>
                 </div>
 
                 <div class="preview-content">
@@ -3368,7 +3368,7 @@ ${bodyMatch[1]}
             // 获取当前角色信息
             const characterInfo = getCurrentCharacterInfo();
             if (!characterInfo) {
-                showStatus('❌ 请先选择一个角色', true);
+                showStatus('请先选择一个角色', true);
                 return;
             }
             
@@ -3385,7 +3385,7 @@ ${bodyMatch[1]}
             const success = await handleInsertRegexWithData(formData, characterInfo);
             
             if (success) {
-                showStatus('✅ 正则表达式已成功添加');
+                showStatus('正则表达式已成功添加');
                 
                 // 清空表单（可选）
                 if (!extensionSettings.rememberLastValues) {
@@ -3397,7 +3397,7 @@ ${bodyMatch[1]}
             
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 插入正则表达式失败:`, error);
-            showStatus(`❌ 插入失败: ${error.message}`, true);
+            showStatus(`插入失败: ${error.message}`, true);
         }
     }
 

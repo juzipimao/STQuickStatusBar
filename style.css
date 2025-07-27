@@ -4,7 +4,7 @@
 #STQuickStatusBar-settings {
     margin: 10px 0;
     padding: 0;
-    border: 1px solid var(--SmartThemeBorderColor);
+    border: 2px solid #888888;
     border-radius: 5px;
     background: transparent;
 }
@@ -67,6 +67,9 @@
     display: flex;
     flex-direction: column;
     overflow: visible;
+    border: 2px solid #888888;
+    border-radius: 8px;
+    padding: 15px;
 }
 
 /* === 页面切换标签样式 === */
@@ -80,8 +83,8 @@
 }
 
 .tab-button {
-    background: var(--SmartThemeBlurTintColor);
-    border: 1px solid var(--SmartThemeBorderColor);
+    background: #000000;
+    border: 1px solid #888888;
     border-bottom: none;
     padding: 10px 20px;
     cursor: pointer;
@@ -89,20 +92,20 @@
     transition: all 0.2s ease;
     font-size: 14px;
     font-weight: 500;
-    color: var(--SmartThemeQuoteColor);
+    color: #ffffff;
     position: relative;
     top: 2px;
 }
 
 .tab-button:hover {
-    background: var(--SmartThemeBodyColor);
-    color: var(--SmartThemeEmColor);
+    background: #333333;
+    color: #ffffff;
 }
 
 .tab-button.active {
-    background: var(--SmartThemeBodyColor);
-    color: var(--SmartThemeEmColor);
-    border-bottom: 2px solid var(--SmartThemeBodyColor);
+    background: #555555;
+    color: #ffffff;
+    border-bottom: 2px solid #555555;
     z-index: 1;
 }
 
@@ -114,6 +117,10 @@
     overflow-y: visible;
     overflow-x: hidden;
     max-height: none;
+    border: 1px solid #888888;
+    border-radius: 6px;
+    margin-top: 10px;
+    padding: 20px;
 }
 
 .page-content:not(.active) {
@@ -123,12 +130,15 @@
 /* === AI配置表单样式 === */
 .ai-config-form {
     space-y: 15px;
+    border: 2px solid #888888;
+    border-radius: 8px;
+    padding: 15px;
 }
 
 .api-config {
     padding: 15px;
     background: var(--SmartThemeBlurTintColor);
-    border: 1px solid var(--SmartThemeBorderColor);
+    border: 2px solid #888888;
     border-radius: 8px;
     margin: 10px 0;
 }
@@ -144,20 +154,21 @@
 .ai-generate-btn {
     width: 100%;
     padding: 12px 20px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
+    background: #000000;
+    color: #ffffff;
+    border: 1px solid #888888;
     border-radius: 8px;
     font-size: 16px;
-    font-weight: 600;
+    font-weight: normal;
     cursor: pointer;
     transition: all 0.3s ease;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
 }
 
 .ai-generate-btn:hover:not(:disabled) {
     transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+    background: #333333;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
 }
 
 .ai-generate-btn:active {
@@ -168,55 +179,58 @@
     opacity: 0.6;
     cursor: not-allowed;
     transform: none;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
+    background: #666666;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }
 
 /* === AI应用按钮样式 === */
 .ai-apply-btn {
     width: 100%;
     padding: 10px 18px;
-    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-    color: white;
-    border: none;
+    background: #000000;
+    color: #ffffff;
+    border: 2px solid #ffffff;
     border-radius: 6px;
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
-    box-shadow: 0 3px 10px rgba(76, 175, 80, 0.3);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
 }
 
 .ai-apply-btn:hover {
     transform: translateY(-1px);
-    box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+    background: #333333;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
 }
 
 /* === AI预览按钮样式 === */
 .ai-preview-btn {
     width: 100%;
     padding: 10px 18px;
-    background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
-    color: white;
-    border: none;
+    background: #000000;
+    color: #ffffff;
+    border: 2px solid #ffffff;
     border-radius: 6px;
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
-    box-shadow: 0 3px 10px rgba(33, 150, 243, 0.3);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
 }
 
 .ai-preview-btn:hover {
     transform: translateY(-1px);
-    box-shadow: 0 5px 15px rgba(33, 150, 243, 0.4);
+    background: #333333;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
 }
 
 /* === AI结果区域样式 === */
 .ai-result-section {
     margin-top: 20px;
     padding: 15px;
-    background: rgba(76, 175, 80, 0.05);
-    border: 1px solid rgba(76, 175, 80, 0.2);
+    background: #1a1a1a;
+    border: 2px solid #888888;
     border-radius: 8px;
 }
 
@@ -225,13 +239,13 @@
 }
 
 .ai-result-section label {
-    color: #2e7d32;
+    color: #ffffff;
     font-weight: 600;
 }
 
 .ai-result-section textarea {
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(76, 175, 80, 0.3);
+    background: #1a1a1a;
+    border: 1px solid #888888;
 }
 
 /* === 模态框头部样式 === */
@@ -256,7 +270,7 @@
     padding: 10px;
     background: var(--SmartThemeBlurTintColor);
     border-radius: 8px;
-    border: 1px solid var(--SmartThemeBorderColor);
+    border: 2px solid #888888;
     margin-bottom: 15px;
 }
 
@@ -276,7 +290,7 @@
 .no-character {
     padding: 10px;
     background: rgba(255, 193, 7, 0.1);
-    border: 1px solid rgba(255, 193, 7, 0.3);
+    border: 2px solid #888888;
     border-radius: 8px;
     color: #856404;
     text-align: center;
@@ -287,6 +301,9 @@
 /* === 表单样式 === */
 .quick-regex-form, .ai-config-form {
     space-y: 15px;
+    border: 2px solid #888888;
+    border-radius: 8px;
+    padding: 15px;
 }
 
 .form-group {
@@ -304,10 +321,10 @@
 .form-control {
     width: 100%;
     padding: 8px 12px;
-    border: 1px solid var(--SmartThemeBorderColor);
+    border: 1px solid #888888;
     border-radius: 4px;
-    background: var(--SmartThemeBodyColor);
-    color: var(--SmartThemeEmColor);
+    background: #1a1a1a;
+    color: #ffffff;
     font-size: 14px;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
@@ -317,13 +334,13 @@
 
 .form-control:focus {
     outline: none;
-    border-color: var(--SmartThemeQuoteColor);
-    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    border-color: #aaaaaa;
+    box-shadow: 0 0 0 2px rgba(170, 170, 170, 0.3);
 }
 
 .form-control::placeholder {
-    color: var(--SmartThemeQuoteColor);
-    opacity: 0.7;
+    color: #888888;
+    opacity: 0.8;
 }
 
 /* 确保textarea保持原始格式 */
@@ -339,6 +356,29 @@ textarea.form-control {
 input[type="password"].form-control {
     font-family: 'Courier New', monospace;
     letter-spacing: 2px;
+    background: #1a1a1a;
+    color: #ffffff;
+    border: 1px solid #888888;
+}
+
+/* 所有输入框类型深黑色背景 */
+input[type="text"].form-control,
+input[type="url"].form-control,
+input[type="email"].form-control,
+input[type="number"].form-control {
+    background: #1a1a1a;
+    color: #ffffff;
+    border: 1px solid #888888;
+}
+
+input[type="text"].form-control:focus,
+input[type="url"].form-control:focus,
+input[type="email"].form-control:focus,
+input[type="number"].form-control:focus,
+input[type="password"].form-control:focus {
+    background: #1a1a1a;
+    border-color: #aaaaaa;
+    box-shadow: 0 0 0 2px rgba(170, 170, 170, 0.3);
 }
 
 /* === 表单行布局 === */
@@ -502,12 +542,14 @@ input[type="password"].form-control {
     .quick-regex-container {
         padding: 10px;
         max-width: 95vw;
-        max-height: 90vh;
+        min-height: 85vh;
+        max-height: none;
     }
 
     .page-content {
-        max-height: calc(90vh - 180px);
-        padding: 15px 0;
+        min-height: 60vh;
+        max-height: none;
+        padding: 15px;
     }
 
     .form-row {
@@ -593,17 +635,17 @@ input[type="password"].form-control {
 
     .tab-button:hover {
         transform: none !important;
-        background: var(--st-bg-tertiary) !important;
-        color: var(--st-text-primary) !important;
+        background: #333333 !important;
+        color: #ffffff !important;
         box-shadow: none !important;
     }
 
     .tab-button.active {
-        background: var(--st-accent-blue) !important;
+        background: #555555 !important;
         color: white !important;
-        border-color: var(--st-accent-blue) !important;
-        border-bottom-color: var(--st-accent-blue) !important;
-        box-shadow: 0 2px 4px rgba(66, 153, 225, 0.3) !important;
+        border-color: #555555 !important;
+        border-bottom-color: #555555 !important;
+        box-shadow: 0 2px 4px rgba(85, 85, 85, 0.3) !important;
         transform: none !important;
     }
 
@@ -801,11 +843,25 @@ input[type="password"].form-control {
 /* === 选择框特殊样式 === */
 select.form-control {
     cursor: pointer;
-    background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 5'%3E%3Cpath fill='%23666' d='m2 0-2 2h4zm0 5 2-2h-4z'/%3E%3C/svg%3E");
+    background: #1a1a1a;
+    color: #ffffff;
+    border: 1px solid #888888;
+    background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 5'%3E%3Cpath fill='%23ffffff' d='m2 0-2 2h4zm0 5 2-2h-4z'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 8px center;
     background-size: 12px;
     padding-right: 30px;
+}
+
+select.form-control:focus {
+    background: #1a1a1a;
+    border-color: #aaaaaa;
+    box-shadow: 0 0 0 2px rgba(170, 170, 170, 0.3);
+}
+
+select.form-control option {
+    background: #1a1a1a;
+    color: #ffffff;
 }
 
 /* === 预览弹窗样式 === */
@@ -905,7 +961,7 @@ select.form-control {
     height: 100% !important;
     border: none !important;
     border-radius: 8px;
-    background-color: #ffffff;
+    background-color: #1a1a1a;
     display: block;
 }
 
@@ -1388,7 +1444,7 @@ select.form-control {
 
 /* === 预览弹窗特殊样式 - 保留用于HTML预览功能 === */
 .html-render-frame {
-    background: #ffffff;
+    background: #1a1a1a;
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -1399,7 +1455,7 @@ select.form-control {
     height: 100%;
     border: none;
     border-radius: 8px;
-    background-color: #ffffff;
+    background-color: #1a1a1a;
     display: block;
 }
 
@@ -1782,7 +1838,7 @@ select.form-control {
     margin: 10px 0;
     padding: 15px;
     background: var(--SmartThemeBlurTintColor);
-    border: 1px solid var(--SmartThemeBorderColor);
+    border: 2px solid #888888;
     border-radius: 8px;
 }
 
@@ -1981,7 +2037,7 @@ select.form-control {
     min-height: 300px;
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 6px;
-    background: #ffffff;
+    background: #1a1a1a;
     overflow: hidden;
 }
 
@@ -1990,7 +2046,7 @@ select.form-control {
     height: 400px;
     border: none;
     border-radius: 6px;
-    background-color: #ffffff;
+    background-color: #1a1a1a;
 }
 
 .text-comparison-grid {
