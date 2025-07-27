@@ -8,7 +8,7 @@
     "css": "style.css",
     "author": "SillyTavern Plugin Developer",
     "version": "1.0.0",
-    "homePage": "https://github.com/example/st-quick-status-bar",
+    "homePage": "https://github.com/juzipimao/STQuickStatusBar",
     "auto_update": false,
     "description": "一个快速为当前角色添加正则表达式规则的工具，提供简洁的模态框界面进行正则查找和替换操作。支持完整保留用户输入的原始格式。"
 }
