@@ -135,6 +135,17 @@
     padding: 15px;
 }
 
+/* AI配置表单内所有输入框黑色背景 */
+.ai-config-form .form-control,
+.ai-config-form input[type="text"],
+.ai-config-form input[type="number"],
+.ai-config-form textarea,
+.ai-config-form select {
+    background: #1a1a1a !important;
+    color: #ffffff !important;
+    border: 1px solid #888888 !important;
+}
+
 .api-config {
     padding: 15px;
     background: var(--SmartThemeBlurTintColor);
@@ -1320,7 +1331,7 @@ select.form-control option {
 
 /* === 效果对比区域 === */
 .comparison-section {
-    background: var(--SmartThemeBlurTintColor);
+    background: #1a1a1a;
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 8px;
     padding: 15px;
@@ -1461,7 +1472,7 @@ select.form-control option {
 
 /* === 内联预览样式 === */
 .inline-preview-container {
-    background: var(--SmartThemeBlurTintColor);
+    background: #1a1a1a;
     border: 2px solid var(--SmartThemeQuoteColor);
     border-radius: 12px;
     margin: 20px 0;
@@ -1490,7 +1501,7 @@ select.form-control option {
 }
 
 .inline-preview-header {
-    background: var(--SmartThemeQuoteColor);
+    background: #1a1a1a;
     color: white;
     padding: 15px 20px;
     display: flex;
@@ -2057,7 +2068,7 @@ select.form-control option {
 
 .before-column,
 .after-column {
-    background: var(--SmartThemeBodyColor);
+    background: #1a1a1a;
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 6px;
     padding: 15px;
