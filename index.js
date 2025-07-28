@@ -819,9 +819,12 @@
                         <!-- 自定义API配置 -->
                         <div id="custom-config" class="api-config" ${extensionSettings.aiProvider !== 'custom' ? 'style="display: none;"' : ''}>
                             <div class="form-group">
-                                <label for="custom-api-url">API URL:</label>
+                                <label for="custom-api-url">API 基础URL:</label>
                                 <input type="text" id="custom-api-url" class="form-control"
-                                       placeholder="https://api.example.com/v1/chat/completions" value="${extensionSettings.customApiUrl}">
+                                       placeholder="https://api.example.com/v1" value="${extensionSettings.customApiUrl}">
+                                <small style="color: var(--SmartThemeQuoteColor); font-size: 12px;">
+                                    💡 提示：只需填写到 /v1 即可，系统会自动拼接 /chat/completions 和 /models 端点
+                                </small>
                             </div>
                             <div class="form-group">
                                 <label for="custom-api-key">API Key:</label>
@@ -829,9 +832,11 @@
                                        placeholder="输入你的API密钥" value="${extensionSettings.customApiKey}">
                             </div>
                             <div class="form-group">
-                                <label for="custom-model">模型:</label>
-                                <input type="text" id="custom-model" class="form-control"
-                                       placeholder="模型名称" value="${extensionSettings.customModel}">
+                                <label for="custom-model-section">模型:</label>
+                                <input type="hidden" id="custom-model" value="${extensionSettings.customModel}">
+                                <button type="button" id="fetch-custom-models" class="ai-generate-btn" style="width: 100%; padding: 8px 12px;">
+                                    获取模型列表
+                                </button>
                             </div>
                         </div>
 
@@ -1229,10 +1234,83 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
     }
 
     /**
+     * 标准化API基础URL
+     */
+    function normalizeApiBaseUrl(baseUrl) {
+        if (!baseUrl) return '';
+        
+        // 移除末尾的斜杠
+        let normalized = baseUrl.trim().replace(/\/+$/, '');
+        
+        // 确保以http://或https://开头
+        if (!normalized.match(/^https?:\/\//)) {
+            normalized = 'https://' + normalized;
+        }
+        
+        console.log(`[${EXTENSION_NAME}] 标准化API URL: ${baseUrl} -> ${normalized}`);
+        return normalized;
+    }
+
+    /**
+     * 获取自定义API的模型列表
+     */
+    async function fetchCustomModels(baseUrl, apiKey) {
+        console.log(`[${EXTENSION_NAME}] 获取自定义API模型列表`);
+
+        try {
+            const normalizedUrl = normalizeApiBaseUrl(baseUrl);
+            const modelsUrl = `${normalizedUrl}/models`;
+            
+            console.log(`[${EXTENSION_NAME}] 请求模型列表URL: ${modelsUrl}`);
+
+            const response = await fetch(modelsUrl, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            console.log(`[${EXTENSION_NAME}] 模型列表响应:`, data);
+
+            // 解析模型列表，支持OpenAI格式
+            if (data.data && Array.isArray(data.data)) {
+                return data.data.map(model => ({
+                    id: model.id,
+                    name: model.id,
+                    created: model.created
+                }));
+            } else if (Array.isArray(data)) {
+                return data.map(model => ({
+                    id: typeof model === 'string' ? model : model.id,
+                    name: typeof model === 'string' ? model : model.id
+                }));
+            } else {
+                throw new Error('无法解析模型列表响应格式');
+            }
+
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 获取模型列表失败:`, error);
+            throw error;
+        }
+    }
+
+    /**
      * 调用自定义API (OpenAI格式, 支持对话历史)
      */
-    async function callCustomAPI(prompt, apiUrl, apiKey, model) {
+    async function callCustomAPI(prompt, apiBaseUrl, apiKey, model) {
         console.log(`[${EXTENSION_NAME}] 调用自定义API开始`);
+
+        // 标准化基础URL并拼接chat/completions端点
+        const normalizedBaseUrl = normalizeApiBaseUrl(apiBaseUrl);
+        const apiUrl = `${normalizedBaseUrl}/chat/completions`;
+        
+        console.log(`[${EXTENSION_NAME}] 完整API请求URL: ${apiUrl}`);
 
         // 构建系统提示词
         const systemPrompt = `你是一个专业的正则表达式专家，专门为角色扮演游戏创建状态栏文本处理规则。请根据用户的需求生成合适的正则表达式和替换内容。
@@ -1413,7 +1491,8 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP 错误! 状态: ${response.status}`);
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${response.statusText}\n${errorText}`);
             }
 
             const data = await response.json();
@@ -3342,6 +3421,155 @@ ${bodyMatch[1]}
     }
     
     /**
+     * 创建模型选择下拉菜单
+     */
+    function createModelSelectDropdown(models) {
+        console.log(`[${EXTENSION_NAME}] 创建模型选择下拉菜单，模型数量: ${models.length}`);
+
+        const customModelInput = document.getElementById('custom-model');
+        if (!customModelInput) {
+            console.error(`[${EXTENSION_NAME}] 找不到模型隐藏输入框`);
+            return;
+        }
+
+        // 找到模型输入框的容器
+        const modelContainer = customModelInput.parentElement;
+        if (!modelContainer) {
+            console.error(`[${EXTENSION_NAME}] 找不到模型输入框的容器`);
+            return;
+        }
+
+        // 移除旧的下拉菜单（如果存在）
+        const existingSelect = modelContainer.querySelector('.model-select-dropdown');
+        if (existingSelect) {
+            existingSelect.remove();
+        }
+
+        // 创建下拉菜单
+        const selectElement = document.createElement('select');
+        selectElement.className = 'form-control model-select-dropdown';
+        selectElement.id = 'model-select-dropdown';
+        selectElement.style.marginTop = '5px';
+
+        // 添加默认选项
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = '-- 请选择模型 --';
+        selectElement.appendChild(defaultOption);
+
+        // 添加模型选项
+        models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = model.name || model.id;
+            
+            // 如果模型有描述或额外信息，添加到title属性
+            if (model.created) {
+                const createdDate = new Date(model.created * 1000).toLocaleDateString();
+                option.title = `创建时间: ${createdDate}`;
+            }
+            
+            selectElement.appendChild(option);
+        });
+
+        // 如果当前隐藏输入框有值，尝试在下拉菜单中选中对应项
+        const currentValue = customModelInput.value.trim();
+        if (currentValue) {
+            const matchingOption = Array.from(selectElement.options).find(opt => opt.value === currentValue);
+            if (matchingOption) {
+                selectElement.value = currentValue;
+            }
+        }
+
+        // 添加选择事件监听
+        selectElement.addEventListener('change', function() {
+            const selectedValue = this.value;
+            if (selectedValue) {
+                customModelInput.value = selectedValue;
+                console.log(`[${EXTENSION_NAME}] 用户选择了模型: ${selectedValue}`);
+                
+                // 触发隐藏输入框的change事件以保存配置
+                const changeEvent = new Event('change', { bubbles: true });
+                customModelInput.dispatchEvent(changeEvent);
+                
+                showStatus(`✅ 已选择模型: ${selectedValue}`, false);
+            } else {
+                customModelInput.value = '';
+            }
+        });
+
+        // 在按钮后面插入下拉菜单
+        const fetchButton = document.getElementById('fetch-custom-models');
+        if (fetchButton && fetchButton.nextSibling) {
+            modelContainer.insertBefore(selectElement, fetchButton.nextSibling);
+        } else {
+            modelContainer.appendChild(selectElement);
+        }
+
+        // 移除旧的说明文字（如果存在）
+        const existingHelp = modelContainer.querySelector('.model-select-help');
+        if (existingHelp) {
+            existingHelp.remove();
+        }
+
+        console.log(`[${EXTENSION_NAME}] 模型选择下拉菜单创建完成`);
+    }
+
+    /**
+     * 处理获取自定义模型列表
+     */
+    async function handleFetchCustomModels() {
+        console.log(`[${EXTENSION_NAME}] 开始获取自定义模型列表`);
+
+        try {
+            const customUrl = document.getElementById('custom-api-url')?.value?.trim();
+            const customKey = document.getElementById('custom-api-key')?.value?.trim();
+            const fetchButton = document.getElementById('fetch-custom-models');
+            
+            if (!customUrl) {
+                showStatus('❌ 请先输入API基础URL', true);
+                return;
+            }
+            
+            if (!customKey) {
+                showStatus('❌ 请先输入API Key', true);
+                return;
+            }
+
+            // 显示加载状态
+            const originalText = fetchButton.textContent;
+            fetchButton.textContent = '获取中...';
+            fetchButton.disabled = true;
+
+            // 调用获取模型函数
+            const models = await fetchCustomModels(customUrl, customKey);
+            console.log(`[${EXTENSION_NAME}] 获取到 ${models.length} 个模型`);
+
+            if (models.length === 0) {
+                showStatus('⚠️ 未找到任何可用模型', false);
+            } else {
+                // 创建模型选择下拉菜单
+                createModelSelectDropdown(models);
+                showStatus(`✅ 获取到 ${models.length} 个模型，请从下拉菜单中选择`);
+                
+                // 自动保存配置
+                autoSaveAPIConfig();
+            }
+
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 获取模型列表失败:`, error);
+            showStatus(`❌ 获取模型失败: ${error.message}`, true);
+        } finally {
+            // 恢复按钮状态
+            const fetchButton = document.getElementById('fetch-custom-models');
+            if (fetchButton) {
+                fetchButton.textContent = '获取模型列表';
+                fetchButton.disabled = false;
+            }
+        }
+    }
+
+    /**
      * 绑定AI相关事件
      */
     function bindAIEvents() {
@@ -3371,6 +3599,11 @@ ${bodyMatch[1]}
         // 应用AI结果
         $(document).off('click', '#apply-ai-result').on('click', '#apply-ai-result', function() {
             applyAIResult();
+        });
+        
+        // 获取自定义模型列表
+        $(document).off('click', '#fetch-custom-models').on('click', '#fetch-custom-models', function() {
+            handleFetchCustomModels();
         });
         
         // 对话历史管理
