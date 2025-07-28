@@ -810,9 +810,11 @@
                                        placeholder="输入你的Gemini API密钥" value="${extensionSettings.geminiApiKey}">
                             </div>
                             <div class="form-group">
-                                <label for="gemini-model">模型:</label>
-                                <input type="text" id="gemini-model" class="form-control"
-                                       placeholder="模型名称" value="${extensionSettings.defaultModel}">
+                                <label for="gemini-model-section">模型:</label>
+                                <input type="hidden" id="gemini-model" value="${extensionSettings.defaultModel}">
+                                <button type="button" id="fetch-gemini-models" class="ai-generate-btn" style="width: 100%; padding: 8px 12px;">
+                                    获取Gemini模型列表
+                                </button>
                             </div>
                         </div>
 
@@ -1229,6 +1231,61 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] Gemini API调用失败:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 获取Gemini API的模型列表
+     */
+    async function fetchGeminiModels(apiKey) {
+        console.log(`[${EXTENSION_NAME}] 获取Gemini模型列表`);
+
+        try {
+            const modelsUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+            
+            console.log(`[${EXTENSION_NAME}] 请求Gemini模型列表URL: ${modelsUrl.replace(/key=.+/, 'key=***')}`);
+
+            const response = await fetch(modelsUrl, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            console.log(`[${EXTENSION_NAME}] Gemini模型列表响应:`, data);
+
+            // 解析Gemini模型列表
+            if (data.models && Array.isArray(data.models)) {
+                const models = data.models
+                    .filter(model => {
+                        // 过滤掉不支持生成内容的模型
+                        return model.supportedGenerationMethods && 
+                               model.supportedGenerationMethods.includes('generateContent');
+                    })
+                    .map(model => ({
+                        id: model.name.replace('models/', ''), // 移除'models/'前缀
+                        name: model.displayName || model.name.replace('models/', ''),
+                        description: model.description,
+                        version: model.version,
+                        inputTokenLimit: model.inputTokenLimit,
+                        outputTokenLimit: model.outputTokenLimit
+                    }))
+                    .sort((a, b) => a.name.localeCompare(b.name)); // 按名称排序
+
+                console.log(`[${EXTENSION_NAME}] 解析得到 ${models.length} 个可用的Gemini模型`);
+                return models;
+            } else {
+                throw new Error('无法解析Gemini模型列表响应格式');
+            }
+
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 获取Gemini模型列表失败:`, error);
             throw error;
         }
     }
@@ -3423,17 +3480,18 @@ ${bodyMatch[1]}
     /**
      * 创建模型选择下拉菜单
      */
-    function createModelSelectDropdown(models) {
-        console.log(`[${EXTENSION_NAME}] 创建模型选择下拉菜单，模型数量: ${models.length}`);
+    function createModelSelectDropdown(models, modelType = 'custom') {
+        console.log(`[${EXTENSION_NAME}] 创建模型选择下拉菜单，模型数量: ${models.length}，类型: ${modelType}`);
 
-        const customModelInput = document.getElementById('custom-model');
-        if (!customModelInput) {
-            console.error(`[${EXTENSION_NAME}] 找不到模型隐藏输入框`);
+        const modelInputId = modelType === 'gemini' ? 'gemini-model' : 'custom-model';
+        const modelInput = document.getElementById(modelInputId);
+        if (!modelInput) {
+            console.error(`[${EXTENSION_NAME}] 找不到模型隐藏输入框: ${modelInputId}`);
             return;
         }
 
         // 找到模型输入框的容器
-        const modelContainer = customModelInput.parentElement;
+        const modelContainer = modelInput.parentElement;
         if (!modelContainer) {
             console.error(`[${EXTENSION_NAME}] 找不到模型输入框的容器`);
             return;
@@ -3448,7 +3506,7 @@ ${bodyMatch[1]}
         // 创建下拉菜单
         const selectElement = document.createElement('select');
         selectElement.className = 'form-control model-select-dropdown';
-        selectElement.id = 'model-select-dropdown';
+        selectElement.id = `${modelType}-model-select-dropdown`;
         selectElement.style.marginTop = '5px';
 
         // 添加默认选项
@@ -3464,16 +3522,30 @@ ${bodyMatch[1]}
             option.textContent = model.name || model.id;
             
             // 如果模型有描述或额外信息，添加到title属性
+            let titleInfo = [];
+            if (model.description) {
+                titleInfo.push(`描述: ${model.description}`);
+            }
+            if (model.version) {
+                titleInfo.push(`版本: ${model.version}`);
+            }
+            if (model.inputTokenLimit) {
+                titleInfo.push(`输入Token限制: ${model.inputTokenLimit}`);
+            }
             if (model.created) {
                 const createdDate = new Date(model.created * 1000).toLocaleDateString();
-                option.title = `创建时间: ${createdDate}`;
+                titleInfo.push(`创建时间: ${createdDate}`);
+            }
+            
+            if (titleInfo.length > 0) {
+                option.title = titleInfo.join('\n');
             }
             
             selectElement.appendChild(option);
         });
 
         // 如果当前隐藏输入框有值，尝试在下拉菜单中选中对应项
-        const currentValue = customModelInput.value.trim();
+        const currentValue = modelInput.value.trim();
         if (currentValue) {
             const matchingOption = Array.from(selectElement.options).find(opt => opt.value === currentValue);
             if (matchingOption) {
@@ -3485,21 +3557,22 @@ ${bodyMatch[1]}
         selectElement.addEventListener('change', function() {
             const selectedValue = this.value;
             if (selectedValue) {
-                customModelInput.value = selectedValue;
-                console.log(`[${EXTENSION_NAME}] 用户选择了模型: ${selectedValue}`);
+                modelInput.value = selectedValue;
+                console.log(`[${EXTENSION_NAME}] 用户选择了${modelType}模型: ${selectedValue}`);
                 
                 // 触发隐藏输入框的change事件以保存配置
                 const changeEvent = new Event('change', { bubbles: true });
-                customModelInput.dispatchEvent(changeEvent);
+                modelInput.dispatchEvent(changeEvent);
                 
                 showStatus(`✅ 已选择模型: ${selectedValue}`, false);
             } else {
-                customModelInput.value = '';
+                modelInput.value = '';
             }
         });
 
         // 在按钮后面插入下拉菜单
-        const fetchButton = document.getElementById('fetch-custom-models');
+        const fetchButtonId = modelType === 'gemini' ? 'fetch-gemini-models' : 'fetch-custom-models';
+        const fetchButton = document.getElementById(fetchButtonId);
         if (fetchButton && fetchButton.nextSibling) {
             modelContainer.insertBefore(selectElement, fetchButton.nextSibling);
         } else {
@@ -3512,7 +3585,55 @@ ${bodyMatch[1]}
             existingHelp.remove();
         }
 
-        console.log(`[${EXTENSION_NAME}] 模型选择下拉菜单创建完成`);
+        console.log(`[${EXTENSION_NAME}] ${modelType}模型选择下拉菜单创建完成`);
+    }
+
+    /**
+     * 处理获取Gemini模型列表
+     */
+    async function handleFetchGeminiModels() {
+        console.log(`[${EXTENSION_NAME}] 开始获取Gemini模型列表`);
+
+        try {
+            const geminiKey = document.getElementById('gemini-api-key')?.value?.trim();
+            const fetchButton = document.getElementById('fetch-gemini-models');
+            
+            if (!geminiKey) {
+                showStatus('❌ 请先输入Gemini API Key', true);
+                return;
+            }
+
+            // 显示加载状态
+            const originalText = fetchButton.textContent;
+            fetchButton.textContent = '获取中...';
+            fetchButton.disabled = true;
+
+            // 调用获取模型函数
+            const models = await fetchGeminiModels(geminiKey);
+            console.log(`[${EXTENSION_NAME}] 获取到 ${models.length} 个Gemini模型`);
+
+            if (models.length === 0) {
+                showStatus('⚠️ 未找到任何可用的Gemini模型', false);
+            } else {
+                // 创建模型选择下拉菜单
+                createModelSelectDropdown(models, 'gemini');
+                showStatus(`✅ 获取到 ${models.length} 个Gemini模型，请从下拉菜单中选择`);
+                
+                // 自动保存配置
+                autoSaveAPIConfig();
+            }
+
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 获取Gemini模型列表失败:`, error);
+            showStatus(`❌ 获取Gemini模型失败: ${error.message}`, true);
+        } finally {
+            // 恢复按钮状态
+            const fetchButton = document.getElementById('fetch-gemini-models');
+            if (fetchButton) {
+                fetchButton.textContent = '获取Gemini模型列表';
+                fetchButton.disabled = false;
+            }
+        }
     }
 
     /**
@@ -3549,7 +3670,7 @@ ${bodyMatch[1]}
                 showStatus('⚠️ 未找到任何可用模型', false);
             } else {
                 // 创建模型选择下拉菜单
-                createModelSelectDropdown(models);
+                createModelSelectDropdown(models, 'custom');
                 showStatus(`✅ 获取到 ${models.length} 个模型，请从下拉菜单中选择`);
                 
                 // 自动保存配置
@@ -3599,6 +3720,11 @@ ${bodyMatch[1]}
         // 应用AI结果
         $(document).off('click', '#apply-ai-result').on('click', '#apply-ai-result', function() {
             applyAIResult();
+        });
+        
+        // 获取Gemini模型列表
+        $(document).off('click', '#fetch-gemini-models').on('click', '#fetch-gemini-models', function() {
+            handleFetchGeminiModels();
         });
         
         // 获取自定义模型列表
