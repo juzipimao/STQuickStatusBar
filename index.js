@@ -27,6 +27,7 @@
     let getContext, writeExtensionField, characters, this_chid;
     let uuidv4, toastr;
     let loadRegexScripts, reloadCurrentChat, getCurrentChatId;
+    let eventSource, event_types; // 添加事件系统导入
 
     // 默认设置
     let extensionSettings = {
@@ -288,18 +289,22 @@
                 writeExtensionField: typeof writeExtensionField
             });
 
-            // 导入脚本主模块
+            // 导入主脚本模块
             console.log(`[${EXTENSION_NAME}] 导入主脚本模块: /script.js`);
             const scriptModule = await import('/script.js');
             characters = scriptModule.characters;
             this_chid = scriptModule.this_chid;
             reloadCurrentChat = scriptModule.reloadCurrentChat;
             getCurrentChatId = scriptModule.getCurrentChatId;
+            eventSource = scriptModule.eventSource; // 导入事件源
+            event_types = scriptModule.event_types; // 导入事件类型
             console.log(`[${EXTENSION_NAME}] 主脚本模块导入成功:`, {
                 characters: typeof characters,
                 this_chid: typeof this_chid,
                 reloadCurrentChat: typeof reloadCurrentChat,
-                getCurrentChatId: typeof getCurrentChatId
+                getCurrentChatId: typeof getCurrentChatId,
+                eventSource: typeof eventSource,
+                event_types: typeof event_types
             });
 
             // 导入工具模块
@@ -3466,138 +3471,101 @@ ${bodyMatch[1]}
     }
 
     /**
-     * 初始化角色切换事件监听
+     * 初始化角色切换事件监听（纯事件驱动版本）
      */
     function initializeCharacterEventListeners() {
-        console.log(`[${EXTENSION_NAME}] 初始化角色切换事件监听器`);
+        console.log(`[${EXTENSION_NAME}] 初始化角色切换事件监听器（纯事件驱动模式）`);
         
-        // 监听角色选择事件
-        $(document).off('character_selected.STQuickStatusBar').on('character_selected.STQuickStatusBar', function() {
-            console.log(`[${EXTENSION_NAME}] 检测到角色切换事件 (character_selected)`);
-            setTimeout(() => {
-                updateCharacterInfoDisplay();
-            }, 100); // 短暂延迟确保状态更新
-        });
+        // 清除所有之前的监听器
+        $(document).off('.STQuickStatusBar');
         
-        // 监听聊天切换事件
-        $(document).off('chat_changed.STQuickStatusBar').on('chat_changed.STQuickStatusBar', function() {
-            console.log(`[${EXTENSION_NAME}] 检测到聊天切换事件 (chat_changed)`);
-            setTimeout(() => {
-                updateCharacterInfoDisplay();
-            }, 100);
-        });
+        // 检查事件系统是否可用
+        if (!eventSource || !event_types) {
+            console.error(`[${EXTENSION_NAME}] eventSource 或 event_types 未导入，无法设置标准事件监听`);
+            console.log(`[${EXTENSION_NAME}] eventSource:`, typeof eventSource);
+            console.log(`[${EXTENSION_NAME}] event_types:`, typeof event_types); 
+            return;
+        }
+
+        // 使用SillyTavern标准事件系统
+        console.log(`[${EXTENSION_NAME}] 设置SillyTavern标准事件监听`);
         
-        // 监听角色数据更新事件
-        $(document).off('character_edited.STQuickStatusBar').on('character_edited.STQuickStatusBar', function() {
-            console.log(`[${EXTENSION_NAME}] 检测到角色编辑事件 (character_edited)`);
-            updateCharacterInfoDisplay();
-        });
-        
-        // 监听通用UI更新事件
-        $(document).off('character_loaded.STQuickStatusBar').on('character_loaded.STQuickStatusBar', function() {
-            console.log(`[${EXTENSION_NAME}] 检测到角色加载事件 (character_loaded)`);
-            setTimeout(() => {
-                updateCharacterInfoDisplay();
-            }, 200);
-        });
-        
-        // 添加周期性检查作为备用方案（每5秒检查一次）
-        setInterval(() => {
-            if (extensionSettings.enabled) {
-                const currentChar = getCurrentCharacterInfo();
-                const displayedName = $('.character-name').text();
-                if (currentChar && !displayedName.includes(currentChar.name)) {
-                    console.log(`[${EXTENSION_NAME}] 周期性检查发现角色变化，更新显示`);
-                    updateCharacterInfoDisplay();
-                }
-            }
-        }, 5000);
-        
-        // 新增：监听更多SillyTavern事件
-        $(document).off('characterChanged.STQuickStatusBar').on('characterChanged.STQuickStatusBar', function() {
-            console.log(`[${EXTENSION_NAME}] 检测到角色变更事件 (characterChanged)`);
-            setTimeout(() => {
-                updateCharacterInfoDisplay();
-            }, 150);
-        });
-        
-        // 新增：监听页面可见性变化（用户可能在其他标签页切换了角色）
-        document.addEventListener('visibilitychange', function() {
-            if (!document.hidden && extensionSettings.enabled) {
-                console.log(`[${EXTENSION_NAME}] 页面重新获得焦点，检查角色状态`);
-                setTimeout(() => {
-                    updateCharacterInfoDisplay();
-                }, 300);
-            }
-        });
-        
-        // 新增：监听全局变量this_chid的变化（更频繁的检查）
-        let lastKnownCharId = this_chid;
-        let lastKnownContext = null;
-        
-        const charIdWatcher = setInterval(() => {
-            if (extensionSettings.enabled) {
-                const currentContext = getContext();
-                const currentCharId = currentContext?.characterId;
-                
-                // 检查 characterId 是否变化
-                if (currentCharId !== undefined && currentCharId !== lastKnownContext?.characterId) {
-                    console.log(`[${EXTENSION_NAME}] 检测到context.characterId变化: ${lastKnownContext?.characterId} -> ${currentCharId}`);
-                    lastKnownContext = currentContext;
-                    updateCharacterInfoDisplay();
-                }
-                
-                // 检查 this_chid 是否变化
-                if (this_chid !== lastKnownCharId) {
-                    console.log(`[${EXTENSION_NAME}] 检测到this_chid变化: ${lastKnownCharId} -> ${this_chid}`);
-                    lastKnownCharId = this_chid;
-                    updateCharacterInfoDisplay();
-                }
-            }
-        }, 500); // 每0.5秒检查一次，更加敏感
-        
-        // 新增：使用MutationObserver监听DOM变化
-        if (typeof MutationObserver !== 'undefined') {
-            const observer = new MutationObserver((mutations) => {
-                mutations.forEach((mutation) => {
-                    if (mutation.type === 'childList' || mutation.type === 'attributes') {
-                        // 检查是否有角色相关的DOM变化
-                        const changedNodes = Array.from(mutation.addedNodes);
-                        const hasCharacterChange = changedNodes.some(node => 
-                            node.nodeType === Node.ELEMENT_NODE && 
-                            (node.classList?.contains('character') || 
-                             node.querySelector?.('.character') ||
-                             node.textContent?.includes('character'))
-                        );
-                        
-                        if (hasCharacterChange && extensionSettings.enabled) {
-                            console.log(`[${EXTENSION_NAME}] DOM变化检测到可能的角色切换`);
-                            setTimeout(() => {
-                                updateCharacterInfoDisplay();
-                            }, 500);
-                        }
-                    }
-                });
-            });
-            
-            // 监听整个文档的变化
-            observer.observe(document.body, {
-                childList: true,
-                subtree: true,
-                attributes: true,
-                attributeFilter: ['class', 'data-character']
+        // 1. 监听聊天切换事件 - 最重要的事件
+        if (event_types.CHAT_CHANGED) {
+            eventSource.on(event_types.CHAT_CHANGED, () => {
+                console.log(`[${EXTENSION_NAME}] ✅ 检测到聊天切换事件 (CHAT_CHANGED)`);
+                setTimeout(() => updateCharacterInfoDisplay(), 150);
             });
         }
         
-        console.log(`[${EXTENSION_NAME}] 角色事件监听器初始化完成`);
+        // 2. 监听角色选择事件
+        eventSource.on('character_selected', () => {
+            console.log(`[${EXTENSION_NAME}] ✅ 检测到角色选择事件 (character_selected)`);
+            setTimeout(() => updateCharacterInfoDisplay(), 100);
+        });
+        
+        // 3. 监听角色加载事件
+        eventSource.on('character_loaded', () => {
+            console.log(`[${EXTENSION_NAME}] ✅ 检测到角色加载事件 (character_loaded)`);
+            setTimeout(() => updateCharacterInfoDisplay(), 200);
+        });
+        
+        // 4. 监听角色编辑事件
+        eventSource.on('character_edited', () => {
+            console.log(`[${EXTENSION_NAME}] ✅ 检测到角色编辑事件 (character_edited)`);
+            updateCharacterInfoDisplay();
+        });
+        
+        // 5. 作为备用的jQuery事件监听（保持兼容性）
+        console.log(`[${EXTENSION_NAME}] 设置备用jQuery事件监听`);
+        
+        $(document).on('character_selected.STQuickStatusBar', () => {
+            console.log(`[${EXTENSION_NAME}] 🔄 jQuery备用: character_selected`);
+            setTimeout(() => updateCharacterInfoDisplay(), 150);
+        });
+        
+        $(document).on('chat_changed.STQuickStatusBar', () => {
+            console.log(`[${EXTENSION_NAME}] 🔄 jQuery备用: chat_changed`);
+            setTimeout(() => updateCharacterInfoDisplay(), 150);
+        });
+        
+        $(document).on('character_edited.STQuickStatusBar', () => {
+            console.log(`[${EXTENSION_NAME}] 🔄 jQuery备用: character_edited`);
+            updateCharacterInfoDisplay();
+        });
+        
+        $(document).on('character_loaded.STQuickStatusBar', () => {
+            console.log(`[${EXTENSION_NAME}] 🔄 jQuery备用: character_loaded`);
+            setTimeout(() => updateCharacterInfoDisplay(), 200);
+        });
+        
+        console.log(`[${EXTENSION_NAME}] ✅ 角色事件监听器初始化完成 - 纯事件驱动模式`);
+        console.log(`[${EXTENSION_NAME}] 🚫 已完全移除所有定时器、轮询和MutationObserver`);
+        console.log(`[${EXTENSION_NAME}] 📋 依赖SillyTavern标准事件系统进行角色切换检测`);
     }
 
     /**
-     * 清理事件监听器
+     * 清理事件监听器（纯事件驱动版本）
      */
     function cleanupEventListeners() {
+        console.log(`[${EXTENSION_NAME}] 清理事件监听器`);
+        
+        // 清理jQuery事件监听器
         $(document).off('.STQuickStatusBar');
-        console.log(`[${EXTENSION_NAME}] 事件监听器已清理`);
+        
+        // 清理eventSource事件监听器
+        if (eventSource && typeof eventSource.off === 'function') {
+            // 清理SillyTavern标准事件
+            if (event_types && event_types.CHAT_CHANGED) {
+                eventSource.off(event_types.CHAT_CHANGED);
+            }
+            eventSource.off('character_selected');
+            eventSource.off('character_loaded');
+            eventSource.off('character_edited');
+            console.log(`[${EXTENSION_NAME}] eventSource事件监听器已清理`);
+        }
+        
+        console.log(`[${EXTENSION_NAME}] 所有事件监听器已清理 - 无定时器需要清理`);
     }
 
     /**
