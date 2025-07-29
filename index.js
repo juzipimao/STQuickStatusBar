@@ -747,7 +747,7 @@
                             <label for="regex-replacement">替换为:</label>
                             <textarea id="regex-replacement" class="form-control" rows="8"
                                       placeholder="例如: 空格 (留空表示删除匹配内容)&#10;支持多行文本，换行符会被完全保留">${extensionSettings.lastReplacement}</textarea>
-                            <small style="color: var(--SmartThemeQuoteColor); font-size: 12px;">
+                            <small style="color: var(--SmartThemeQuoteColor); font-size: 0.75rem;">
                                 📋 提示：此处会完全保留您输入的格式，包括所有空格和换行符
                             </small>
                         </div>
@@ -812,7 +812,7 @@
                             <div class="form-group">
                                 <label for="gemini-model-section">模型:</label>
                                 <input type="hidden" id="gemini-model" value="${extensionSettings.defaultModel}">
-                                <button type="button" id="fetch-gemini-models" class="ai-generate-btn" style="width: 100%; padding: 8px 12px;">
+                                <button type="button" id="fetch-gemini-models" class="ai-generate-btn" style="width: 100%; padding: 0.5rem 0.75rem;">
                                     获取Gemini模型列表
                                 </button>
                             </div>
@@ -824,7 +824,7 @@
                                 <label for="custom-api-url">API 基础URL:</label>
                                 <input type="text" id="custom-api-url" class="form-control"
                                        placeholder="https://api.example.com/v1" value="${extensionSettings.customApiUrl}">
-                                <small style="color: var(--SmartThemeQuoteColor); font-size: 12px;">
+                                <small style="color: var(--SmartThemeQuoteColor); font-size: 0.75rem;">
                                     💡 提示：只需填写到 /v1 即可，系统会自动拼接 /chat/completions 和 /models 端点
                                 </small>
                             </div>
@@ -836,7 +836,7 @@
                             <div class="form-group">
                                 <label for="custom-model-section">模型:</label>
                                 <input type="hidden" id="custom-model" value="${extensionSettings.customModel}">
-                                <button type="button" id="fetch-custom-models" class="ai-generate-btn" style="width: 100%; padding: 8px 12px;">
+                                <button type="button" id="fetch-custom-models" class="ai-generate-btn" style="width: 100%; padding: 0.5rem 0.75rem;">
                                     获取模型列表
                                 </button>
                             </div>
@@ -852,7 +852,7 @@
                             <label for="ai-prompt">描述你想要的正则功能:</label>
                             <textarea id="ai-prompt" class="form-control" rows="3"
                                       placeholder="例如: 帮我制定一个角色状态栏，在对话开头显示角色的当前状态">${conversationHistory.getLatestUserInput()}</textarea>
-                            <small style="color: var(--SmartThemeQuoteColor); font-size: 12px;">
+                            <small style="color: var(--SmartThemeQuoteColor); font-size: 0.75rem;">
                                 💡 提示：输入框已自动填入上次的对话内容，支持多轮对话
                             </small>
                         </div>
@@ -898,7 +898,7 @@
 用户：今天感觉怎么样？
 
 AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计划吗？</textarea>
-                                <small style="color: var(--SmartThemeQuoteColor); font-size: 12px;">
+                                <small style="color: var(--SmartThemeQuoteColor); font-size: 0.75rem;">
                                     💡 在上方输入正文内容，点击"预览效果"查看正则表达式应用后的结果
                                 </small>
                             </div>
@@ -2075,7 +2075,7 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
         const iframe = document.createElement('iframe');
         iframe.className = 'inline-preview-iframe';
         iframe.style.width = '100%';
-        iframe.style.height = '400px';
+        iframe.style.height = '25rem';
         iframe.style.border = 'none';
         iframe.style.borderRadius = '8px';
         iframe.style.backgroundColor = '#ffffff';
@@ -2108,9 +2108,9 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 
                     // 设置合理的高度范围
                     const finalHeight = Math.min(Math.max(contentHeight + 20, 200), 500);
-                    iframe.style.height = finalHeight + 'px';
+                    iframe.style.height = (finalHeight / 16) + 'rem';
 
-                    console.log(`[${EXTENSION_NAME}] 内联iframe高度调整为: ${finalHeight}px`);
+                    console.log(`[${EXTENSION_NAME}] 内联iframe高度调整为: ${(finalHeight / 16)}rem`);
                 }
             } catch (error) {
                 console.warn(`[${EXTENSION_NAME}] 无法自动调整内联iframe高度:`, error);
@@ -2317,10 +2317,10 @@ AI助手：太好了！那我们准备一下就出发吧。`,
                             } catch (error) {
                                 console.error(`[${EXTENSION_NAME}] HTML内容插入失败:`, error);
                                 htmlContainer.innerHTML = `
-                                    <div style="padding: 20px; color: #dc3545; text-align: center;">
+                                    <div style="padding: 1.25rem; color: #dc3545; text-align: center;">
                                         <h3>⚠️ HTML渲染失败</h3>
                                         <p>AI生成的HTML内容无法正确渲染</p>
-                                        <pre style="background: #f8f9fa; padding: 10px; border-radius: 4px; overflow: auto; max-height: 200px; text-align: left;">
+                                        <pre style="background: #f8f9fa; padding: 0.625rem; border-radius: 4px; overflow: auto; max-height: 12.5rem; text-align: left;">
                                             ${escapeHtml(aiGeneratedReplacement)}
                                         </pre>
                                     </div>
@@ -2329,7 +2329,7 @@ AI助手：太好了！那我们准备一下就出发吧。`,
                         } else if (htmlContainer) {
                             console.warn(`[${EXTENSION_NAME}] 没有AI生成的HTML内容可以插入`);
                             htmlContainer.innerHTML = `
-                                <div style="padding: 20px; color: #6c757d; text-align: center;">
+                                <div style="padding: 1.25rem; color: #6c757d; text-align: center;">
                                     <h3>📝 无HTML内容</h3>
                                     <p>没有找到AI生成的HTML美化内容</p>
                                 </div>
@@ -2391,9 +2391,9 @@ AI助手：太好了！那我们准备一下就出发吧。`,
 
                     // 设置合理的高度范围
                     const finalHeight = Math.min(Math.max(contentHeight + 20, 200), 600);
-                    iframe.style.height = finalHeight + 'px';
+                    iframe.style.height = (finalHeight / 16) + 'rem';
 
-                    console.log(`[${EXTENSION_NAME}] iframe高度调整为: ${finalHeight}px`);
+                    console.log(`[${EXTENSION_NAME}] iframe高度调整为: ${(finalHeight / 16)}rem`);
                 }
             } catch (error) {
                 console.warn(`[${EXTENSION_NAME}] 无法自动调整iframe高度:`, error);
@@ -2411,7 +2411,7 @@ AI助手：太好了！那我们准备一下就出发吧。`,
 
         if (!htmlContent || typeof htmlContent !== 'string') {
             console.warn(`[${EXTENSION_NAME}] HTML内容为空或格式无效`);
-            return '<div style="padding: 20px; color: #6c757d; text-align: center;">无HTML内容</div>';
+            return '<div style="padding: 1.25rem; color: #6c757d; text-align: center;">无HTML内容</div>';
         }
 
         // 创建临时DOM来解析HTML
@@ -2498,7 +2498,46 @@ AI助手：太好了！那我们准备一下就出发吧。`,
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        /* 响应式设计优化 */
+        @media screen and (max-width: 480px) {
+            .form-control {
+                font-size: 1rem !important;
+                padding: 0.75rem !important;
+            }
+            .ai-generate-btn {
+                padding: 0.75rem 1rem !important;
+                font-size: 0.9rem !important;
+            }
+            small {
+                font-size: 0.8rem !important;
+            }
+        }
+        
+        @media screen and (min-width: 481px) and (max-width: 768px) {
+            .form-control {
+                font-size: 0.95rem !important;
+            }
+            .ai-generate-btn {
+                font-size: 0.85rem !important;
+            }
+        }
+        
+        /* 高DPI设备优化 */
+        @media screen and (-webkit-min-device-pixel-ratio: 2) {
+            .form-control, .ai-generate-btn {
+                -webkit-text-size-adjust: 100%;
+                text-size-adjust: 100%;
+            }
+        }
+        
+        /* 确保按钮和输入框在所有设备上有足够的触摸区域 */
+        .ai-generate-btn, .form-control {
+            min-height: 2.75rem;
+            touch-action: manipulation;
+        }
+    </style>
     <title>状态栏预览</title>
 </head>
 <body>
@@ -3278,7 +3317,7 @@ ${bodyMatch[1]}
             if (isEnabled) {
                 refreshQuickRegexTools();
             } else {
-                toolsContainer.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--SmartThemeQuoteColor);">扩展已禁用</div>';
+                toolsContainer.innerHTML = '<div style="text-align: center; padding: 1.25rem; color: var(--SmartThemeQuoteColor);">扩展已禁用</div>';
             }
         }
         
@@ -3430,6 +3469,11 @@ ${bodyMatch[1]}
             }
             
             refreshQuickRegexTools();
+            
+            // 角色切换后，尝试恢复AI结果（延迟执行，确保UI更新完成）
+            setTimeout(() => {
+                restoreLatestAIResult();
+            }, 300);
         } else {
             console.log(`[${EXTENSION_NAME}] 工具容器不存在或扩展未启用`);
         }
@@ -3507,7 +3551,7 @@ ${bodyMatch[1]}
         const selectElement = document.createElement('select');
         selectElement.className = 'form-control model-select-dropdown';
         selectElement.id = `${modelType}-model-select-dropdown`;
-        selectElement.style.marginTop = '5px';
+        selectElement.style.marginTop = '0.3125rem';
 
         // 添加默认选项
         const defaultOption = document.createElement('option');
@@ -3928,6 +3972,109 @@ ${bodyMatch[1]}
     }
 
     /**
+     * 恢复最新的AI生成结果
+     */
+    function restoreLatestAIResult() {
+        console.log(`[${EXTENSION_NAME}] 检查是否需要恢复AI生成结果`);
+
+        try {
+            // 检查是否启用了历史记录功能
+            if (!extensionSettings.enableConversationHistory) {
+                console.log(`[${EXTENSION_NAME}] 历史记录功能未启用，跳过恢复`);
+                return;
+            }
+
+            // 获取最新的历史记录
+            const history = conversationHistory.getHistory();
+            if (history.length === 0) {
+                console.log(`[${EXTENSION_NAME}] 没有历史记录，跳过恢复`);
+                return;
+            }
+
+            const latestEntry = history[0]; // 最新的记录在数组开头
+            console.log(`[${EXTENSION_NAME}] 找到最新历史记录:`, {
+                id: latestEntry.id,
+                timestamp: latestEntry.timestamp,
+                hasUserPrompt: !!latestEntry.userPrompt,
+                hasAIResponse: !!latestEntry.aiResponse
+            });
+
+            if (!latestEntry.aiResponse || !latestEntry.aiResponse.trim()) {
+                console.log(`[${EXTENSION_NAME}] 最新记录没有AI回复，跳过恢复`);
+                return;
+            }
+
+            // 恢复AI提示输入框内容
+            const aiPromptElement = document.getElementById('ai-prompt');
+            if (aiPromptElement && latestEntry.userPrompt) {
+                aiPromptElement.value = latestEntry.userPrompt;
+                console.log(`[${EXTENSION_NAME}] 已恢复AI提示输入框内容`);
+            }
+
+            // 恢复AI原始回复
+            const rawResponseElement = document.getElementById('ai-raw-response');
+            if (rawResponseElement) {
+                rawResponseElement.value = latestEntry.aiResponse;
+                console.log(`[${EXTENSION_NAME}] 已恢复AI原始回复内容`);
+            }
+
+            // 使用parseAIResponse函数解析AI回复
+            const { regexPattern, replacementContent, exampleContent } = parseAIResponse(latestEntry.aiResponse);
+            console.log(`[${EXTENSION_NAME}] 解析AI回复结果:`, {
+                hasRegexPattern: !!regexPattern,
+                hasReplacementContent: !!replacementContent,
+                hasExampleContent: !!exampleContent
+            });
+
+            // 恢复AI生成的正则表达式
+            const patternElement = document.getElementById('ai-generated-pattern');
+            if (patternElement && regexPattern) {
+                patternElement.value = regexPattern;
+                console.log(`[${EXTENSION_NAME}] 已恢复AI生成的正则表达式`);
+            }
+
+            // 恢复AI生成的替换内容
+            const replacementElement = document.getElementById('ai-generated-replacement');
+            if (replacementElement && replacementContent) {
+                replacementElement.value = replacementContent;
+                console.log(`[${EXTENSION_NAME}] 已恢复AI生成的替换内容`);
+            }
+
+            // 恢复示例正文内容
+            const demoTextElement = document.getElementById('demo-text');
+            if (demoTextElement && exampleContent) {
+                // 只有在当前为空或者是默认内容时才恢复
+                const currentContent = demoTextElement.value.trim();
+                const defaultContent = "这是一段示例对话正文。\n\n用户：今天感觉怎么样？\n\nAI：我今天心情不错，准备和朋友一起出去逛街。你有什么计划吗？";
+                if (!currentContent || currentContent === defaultContent) {
+                    demoTextElement.value = exampleContent;
+                    console.log(`[${EXTENSION_NAME}] 已恢复示例正文内容`);
+                } else {
+                    console.log(`[${EXTENSION_NAME}] 保留现有的正文内容，不覆盖`);
+                }
+            }
+
+            // 显示AI结果区域
+            const resultSection = document.querySelector('.ai-result-section');
+            if (resultSection) {
+                resultSection.style.display = 'block';
+                console.log(`[${EXTENSION_NAME}] 已显示AI结果区域`);
+            }
+
+            // 更新历史记录显示
+            conversationHistory.updateHistoryDisplay();
+
+            // 显示恢复成功的状态
+            showStatus('🔄 已自动恢复上次的AI生成结果', false);
+            console.log(`[${EXTENSION_NAME}] ✅ AI结果恢复完成`);
+
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 恢复AI结果时发生错误:`, error);
+            showStatus(`❌ 恢复AI结果失败: ${error.message}`, true);
+        }
+    }
+
+    /**
      * 初始化扩展
      */
     async function initializeExtension() {
@@ -3956,6 +4103,11 @@ ${bodyMatch[1]}
 
             // 注册斜杠命令
             registerSlashCommands();
+
+            // 尝试恢复最新的AI生成结果
+            setTimeout(() => {
+                restoreLatestAIResult();
+            }, 500); // 延迟执行，确保UI完全加载
 
             isInitialized = true;
             console.log(`[${EXTENSION_NAME}] 扩展初始化完成`);
@@ -3993,6 +4145,7 @@ ${bodyMatch[1]}
         // 新增的工具函数
         updateCharacterInfo: updateCharacterInfoDisplay,
         refreshTools: refreshQuickRegexTools,
+        restoreAIResult: restoreLatestAIResult, // 新增：恢复AI结果功能
         // 调试函数 - 用户可以在控制台调用 STQuickStatusBar.debug() 来诊断问题
         debug: debugCharacterState,
         // 手动获取角色信息 - 用于测试
