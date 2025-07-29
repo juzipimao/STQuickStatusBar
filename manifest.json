@@ -6,7 +6,7 @@
     "js": "index.js",
     "css": "style.css",
     "author": "DayBreak",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "homePage": "https://github.com/juzipimao/STQuickStatusBar",
     "auto_update": false,
     "description": "一个快速为当前角色添加正则表达式规则的工具，提供简洁的模态框界面进行正则查找和替换操作。支持完整保留用户输入的原始格式。"

@@ -1231,7 +1231,22 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] Gemini API调用失败:`, error);
-            throw error;
+            
+            // 增强错误信息
+            let enhancedError = error.message;
+            if (error.message.includes('HTTP 401')) {
+                enhancedError = 'Gemini API Key无效或已过期，请检查您的API Key';
+            } else if (error.message.includes('HTTP 403')) {
+                enhancedError = 'Gemini API访问被拒绝，请检查API Key权限或配额';
+            } else if (error.message.includes('HTTP 429')) {
+                enhancedError = 'Gemini API请求过于频繁，请稍后再试';
+            } else if (error.message.includes('HTTP 400')) {
+                enhancedError = 'Gemini API请求格式错误，请检查模型名称或请求内容';
+            } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                enhancedError = '无法连接到Gemini API，请检查网络连接';
+            }
+            
+            throw new Error(enhancedError);
         }
     }
 
@@ -1599,7 +1614,30 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 自定义API调用失败:`, error);
-            throw error;
+            
+            // 增强错误信息
+            let enhancedError = error.message;
+            if (error.message.includes('HTTP 401')) {
+                enhancedError = '自定义API Key无效或未授权，请检查您的API Key';
+            } else if (error.message.includes('HTTP 403')) {
+                enhancedError = '自定义API访问被拒绝，请检查API Key权限';
+            } else if (error.message.includes('HTTP 404')) {
+                enhancedError = '自定义API端点不存在，请检查API基础URL是否正确';
+            } else if (error.message.includes('HTTP 429')) {
+                enhancedError = '自定义API请求过于频繁，请稍后再试';
+            } else if (error.message.includes('HTTP 400')) {
+                enhancedError = '自定义API请求格式错误，请检查模型名称或API兼容性';
+            } else if (error.message.includes('Failed to fetch')) {
+                if (error.stack && error.stack.includes('ERR_CERT')) {
+                    enhancedError = '自定义API SSL证书验证失败，请检查API地址';
+                } else {
+                    enhancedError = '无法连接到自定义API，请检查API地址和网络连接';
+                }
+            } else if (error.message.includes('NetworkError')) {
+                enhancedError = '无法连接到自定义API，请检查网络设置';
+            }
+            
+            throw new Error(enhancedError);
         }
     }
 
@@ -1823,10 +1861,101 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
             }
 
             showStatus('✅ AI生成完成，示例内容已自动填入正文区域');
+            
+            // 显示成功的toast提示
+            if (toastr) {
+                const provider = document.getElementById('ai-provider')?.value || 'gemini';
+                if (provider === 'gemini') {
+                    toastr.success('Gemini API生成成功', '生成完成');
+                } else if (provider === 'custom') {
+                    toastr.success('自定义API生成成功', '生成完成');
+                } else {
+                    toastr.success('AI正则表达式生成完成', '生成完成');
+                }
+            }
 
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] AI生成失败:`, error);
-            showStatus(`❌ AI生成失败: ${error.message}`, true);
+            
+            // 根据API提供商生成详细的错误信息
+            const provider = document.getElementById('ai-provider')?.value || 'gemini';
+            let errorTitle = '';
+            let troubleshootingSteps = [];
+            
+            if (provider === 'gemini') {
+                errorTitle = 'Gemini API调用失败';
+                troubleshootingSteps = [
+                    '• 检查Gemini API Key是否正确',
+                    '• 确认API Key权限和配额是否充足',
+                    '• 检查网络连接是否正常',
+                    '• 确认Gemini API服务是否可用'
+                ];
+            } else if (provider === 'custom') {
+                errorTitle = '自定义API调用失败';
+                troubleshootingSteps = [
+                    '• 检查API基础URL是否正确',
+                    '• 确认API Key是否有效',
+                    '• 检查网络连接是否正常',
+                    '• 确认API服务是否支持OpenAI格式'
+                ];
+            }
+            
+            // 增强错误信息
+            let enhancedError = error.message;
+            if (error.message.includes('请输入')) {
+                // 配置缺失错误，不需要弹窗
+                showStatus(`❌ ${error.message}`, true);
+                return;
+            } else if (error.message.includes('HTTP 401')) {
+                enhancedError = 'API Key无效或已过期';
+            } else if (error.message.includes('HTTP 403')) {
+                enhancedError = 'API访问被拒绝，请检查权限或配额';
+            } else if (error.message.includes('HTTP 429')) {
+                enhancedError = 'API请求过于频繁，请稍后再试';
+            } else if (error.message.includes('Failed to fetch')) {
+                if (error.stack && error.stack.includes('ERR_CERT')) {
+                    enhancedError = 'SSL证书验证失败，请检查API地址';
+                } else {
+                    enhancedError = '网络连接失败，请检查网络或API地址';
+                }
+            }
+            
+            // 生成详细的错误弹窗内容
+            const errorMessage = `${errorTitle}：\n\n${enhancedError}\n\n请检查：\n${troubleshootingSteps.join('\n')}`;
+            
+            console.log(`[${EXTENSION_NAME}] 准备显示生成错误弹窗，callGenericPopup可用性:`, typeof callGenericPopup);
+            if (callGenericPopup) {
+                console.log(`[${EXTENSION_NAME}] 调用生成错误弹窗，错误信息:`, errorMessage);
+                callGenericPopup(errorMessage, POPUP_TYPE.TEXT, '', {
+                    wide: false,
+                    large: false,
+                    allowVerticalScrolling: true
+                }).then(() => {
+                    console.log(`[${EXTENSION_NAME}] 生成错误弹窗已显示`);
+                }).catch(popupError => {
+                    console.error(`[${EXTENSION_NAME}] 生成错误弹窗显示失败:`, popupError);
+                });
+            } else {
+                console.warn(`[${EXTENSION_NAME}] callGenericPopup不可用，使用alert代替`);
+                alert(errorMessage);
+            }
+            
+            // 显示toast提示
+            console.log(`[${EXTENSION_NAME}] 准备显示生成错误toast，toastr可用性:`, typeof toastr);
+            if (toastr) {
+                if (provider === 'gemini') {
+                    toastr.error('Gemini API调用失败', '生成错误');
+                } else if (provider === 'custom') {
+                    toastr.error('自定义API调用失败', '生成错误');
+                } else {
+                    toastr.error('AI生成正则表达式失败', '生成错误');
+                }
+                console.log(`[${EXTENSION_NAME}] 生成错误toast已显示`);
+            } else {
+                console.warn(`[${EXTENSION_NAME}] toastr不可用`);
+            }
+            
+            showStatus(`❌ AI生成失败: ${enhancedError}`, true);
         } finally {
             // 恢复按钮状态
             const generateBtn = document.getElementById('generate-regex');
