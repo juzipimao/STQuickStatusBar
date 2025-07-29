@@ -1286,7 +1286,20 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 获取Gemini模型列表失败:`, error);
-            throw error;
+            
+            // 增强错误信息
+            let enhancedError = error.message;
+            if (error.message.includes('HTTP 401')) {
+                enhancedError = 'API Key无效或已过期，请检查您的Gemini API Key';
+            } else if (error.message.includes('HTTP 403')) {
+                enhancedError = 'API访问被拒绝，请检查API Key权限或配额';
+            } else if (error.message.includes('HTTP 429')) {
+                enhancedError = 'API请求过于频繁，请稍后再试';
+            } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                enhancedError = '网络连接失败，请检查网络设置或代理配置';
+            }
+            
+            throw new Error(enhancedError);
         }
     }
 
@@ -1353,7 +1366,29 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 获取模型列表失败:`, error);
-            throw error;
+            
+            // 增强错误信息
+            let enhancedError = error.message;
+            if (error.message.includes('HTTP 401')) {
+                enhancedError = 'API Key无效或未授权，请检查您的API Key';
+            } else if (error.message.includes('HTTP 403')) {
+                enhancedError = 'API访问被拒绝，请检查API Key权限';
+            } else if (error.message.includes('HTTP 404')) {
+                enhancedError = 'API端点不存在，请检查API基础URL是否正确';
+            } else if (error.message.includes('HTTP 429')) {
+                enhancedError = 'API请求过于频繁，请稍后再试';
+            } else if (error.message.includes('Failed to fetch')) {
+                // 检查是否是SSL证书错误
+                if (error.stack && error.stack.includes('ERR_CERT')) {
+                    enhancedError = 'SSL证书验证失败，请检查API地址是否正确或使用HTTPS地址';
+                } else {
+                    enhancedError = '网络连接失败，请检查API地址是否正确或网络连接';
+                }
+            } else if (error.message.includes('NetworkError')) {
+                enhancedError = '网络连接失败，请检查网络设置或API地址';
+            }
+            
+            throw new Error(enhancedError);
         }
     }
 
@@ -3661,6 +3696,12 @@ ${bodyMatch[1]}
             } else {
                 // 创建模型选择下拉菜单
                 createModelSelectDropdown(models, 'gemini');
+                
+                // 显示成功的toast提示
+                if (toastr) {
+                    toastr.success(`成功获取 ${models.length} 个Gemini模型`, '成功');
+                }
+                
                 showStatus(`✅ 获取到 ${models.length} 个Gemini模型，请从下拉菜单中选择`);
                 
                 // 自动保存配置
@@ -3669,6 +3710,36 @@ ${bodyMatch[1]}
 
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 获取Gemini模型列表失败:`, error);
+            
+            // 显示详细的错误弹窗
+            const errorMessage = `获取Gemini模型列表失败：\n\n${error.message}\n\n请检查：\n• API Key是否正确\n• 网络连接是否正常\n• Gemini API服务是否可用`;
+            
+            console.log(`[${EXTENSION_NAME}] 准备显示弹窗，callGenericPopup可用性:`, typeof callGenericPopup);
+            if (callGenericPopup) {
+                console.log(`[${EXTENSION_NAME}] 调用弹窗，错误信息:`, errorMessage);
+                callGenericPopup(errorMessage, POPUP_TYPE.TEXT, '', {
+                    wide: false,
+                    large: false,
+                    allowVerticalScrolling: true
+                }).then(() => {
+                    console.log(`[${EXTENSION_NAME}] 弹窗已显示`);
+                }).catch(popupError => {
+                    console.error(`[${EXTENSION_NAME}] 弹窗显示失败:`, popupError);
+                });
+            } else {
+                console.warn(`[${EXTENSION_NAME}] callGenericPopup不可用，使用alert代替`);
+                alert(errorMessage);
+            }
+            
+            // 显示toast提示
+            console.log(`[${EXTENSION_NAME}] 准备显示toast，toastr可用性:`, typeof toastr);
+            if (toastr) {
+                toastr.error('获取Gemini模型失败', '错误');
+                console.log(`[${EXTENSION_NAME}] toast已显示`);
+            } else {
+                console.warn(`[${EXTENSION_NAME}] toastr不可用`);
+            }
+            
             showStatus(`❌ 获取Gemini模型失败: ${error.message}`, true);
         } finally {
             // 恢复按钮状态
@@ -3715,6 +3786,12 @@ ${bodyMatch[1]}
             } else {
                 // 创建模型选择下拉菜单
                 createModelSelectDropdown(models, 'custom');
+                
+                // 显示成功的toast提示
+                if (toastr) {
+                    toastr.success(`成功获取 ${models.length} 个自定义API模型`, '成功');
+                }
+                
                 showStatus(`✅ 获取到 ${models.length} 个模型，请从下拉菜单中选择`);
                 
                 // 自动保存配置
@@ -3723,6 +3800,36 @@ ${bodyMatch[1]}
 
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 获取模型列表失败:`, error);
+            
+            // 显示详细的错误弹窗
+            const errorMessage = `获取自定义API模型列表失败：\n\n${error.message}\n\n请检查：\n• API基础URL是否正确\n• API Key是否有效\n• 网络连接是否正常\n• API服务是否支持/models端点`;
+            
+            console.log(`[${EXTENSION_NAME}] 准备显示弹窗，callGenericPopup可用性:`, typeof callGenericPopup);
+            if (callGenericPopup) {
+                console.log(`[${EXTENSION_NAME}] 调用弹窗，错误信息:`, errorMessage);
+                callGenericPopup(errorMessage, POPUP_TYPE.TEXT, '', {
+                    wide: false,
+                    large: false,
+                    allowVerticalScrolling: true
+                }).then(() => {
+                    console.log(`[${EXTENSION_NAME}] 弹窗已显示`);
+                }).catch(popupError => {
+                    console.error(`[${EXTENSION_NAME}] 弹窗显示失败:`, popupError);
+                });
+            } else {
+                console.warn(`[${EXTENSION_NAME}] callGenericPopup不可用，使用alert代替`);
+                alert(errorMessage);
+            }
+            
+            // 显示toast提示
+            console.log(`[${EXTENSION_NAME}] 准备显示toast，toastr可用性:`, typeof toastr);
+            if (toastr) {
+                toastr.error('获取自定义API模型失败', '错误');
+                console.log(`[${EXTENSION_NAME}] toast已显示`);
+            } else {
+                console.warn(`[${EXTENSION_NAME}] toastr不可用`);
+            }
+            
             showStatus(`❌ 获取模型失败: ${error.message}`, true);
         } finally {
             // 恢复按钮状态
