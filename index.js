@@ -1336,10 +1336,88 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
         return normalized;
     }
 
+    // 持久化缓存API Key，避免页面刷新后重复设置
+    const API_KEY_CACHE_KEY = 'stquickstatusbar_cached_api_key';
+    
+    // 缓存CSRF令牌，避免频繁获取
+    let cachedCsrfToken = null;
+    let csrfTokenCacheTime = 0;
+    const CSRF_CACHE_DURATION = 60000; // 缓存1分钟
+
     /**
-     * 设置自定义API的API Key到SillyTavern secrets
+     * 获取缓存的API Key
+     */
+    function getCachedApiKey() {
+        try {
+            return localStorage.getItem(API_KEY_CACHE_KEY);
+        } catch (error) {
+            console.warn(`[${EXTENSION_NAME}] 无法读取localStorage，使用内存缓存`);
+            return null;
+        }
+    }
+
+    /**
+     * 设置缓存的API Key
+     */
+    function setCachedApiKey(apiKey) {
+        try {
+            localStorage.setItem(API_KEY_CACHE_KEY, apiKey);
+        } catch (error) {
+            console.warn(`[${EXTENSION_NAME}] 无法写入localStorage`);
+        }
+    }
+
+    /**
+     * 清除缓存的API Key (当检测到Key失效时)
+     */
+    function clearCachedApiKey() {
+        try {
+            localStorage.removeItem(API_KEY_CACHE_KEY);
+            console.log(`[${EXTENSION_NAME}] 已清除失效的API Key缓存`);
+        } catch (error) {
+            console.warn(`[${EXTENSION_NAME}] 无法清除localStorage缓存`);
+        }
+    }
+
+    /**
+     * 获取CSRF令牌 (带缓存优化)
+     */
+    async function getCsrfToken() {
+        const now = Date.now();
+        
+        // 如果缓存有效，直接返回缓存的令牌
+        if (cachedCsrfToken && (now - csrfTokenCacheTime) < CSRF_CACHE_DURATION) {
+            return cachedCsrfToken;
+        }
+
+        try {
+            const response = await fetch('/csrf-token');
+            const data = await response.json();
+            
+            // 更新缓存
+            cachedCsrfToken = data.token;
+            csrfTokenCacheTime = now;
+            
+            return data.token;
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 获取CSRF令牌失败:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 设置自定义API的API Key到SillyTavern secrets (简化版)
      */
     async function setCustomApiKey(apiKey) {
+        // 检查缓存中的API Key
+        const cachedApiKey = getCachedApiKey();
+        
+        // 如果API Key没有变化，跳过设置
+        if (cachedApiKey === apiKey) {
+            console.log(`[${EXTENSION_NAME}] API Key未变化，跳过设置 (来自缓存)`);
+            return true;
+        }
+
         try {
             const csrfToken = await getCsrfToken();
             
@@ -1359,7 +1437,9 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
                 throw new Error(`设置API Key失败: HTTP ${response.status}`);
             }
 
-            console.log(`[${EXTENSION_NAME}] 自定义API Key已设置到SillyTavern secrets`);
+            // 更新缓存
+            setCachedApiKey(apiKey);
+            console.log(`[${EXTENSION_NAME}] 自定义API Key已设置并缓存`);
             return true;
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 设置API Key失败:`, error);
@@ -1368,31 +1448,50 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
     }
 
     /**
-     * 获取CSRF令牌
+     * 处理API调用失败，如果是认证错误则清除缓存
      */
-    async function getCsrfToken() {
-        try {
-            const response = await fetch('/csrf-token');
-            const data = await response.json();
-            return data.token;
-        } catch (error) {
-            console.error(`[${EXTENSION_NAME}] 获取CSRF令牌失败:`, error);
-            throw error;
+    function handleApiFailure(error) {
+        const errorMessage = error.message.toLowerCase();
+        
+        // 检查是否为认证相关错误（扩展检测范围）
+        const isAuthError = errorMessage.includes('unauthorized') || 
+                           errorMessage.includes('invalid api key') ||
+                           errorMessage.includes('api key') ||
+                           errorMessage.includes('401') ||
+                           errorMessage.includes('403') ||
+                           errorMessage.includes('authentication') ||
+                           errorMessage.includes('access denied') ||
+                           errorMessage.includes('forbidden') ||
+                           errorMessage.includes('invalid key') ||
+                           errorMessage.includes('key expired') ||
+                           errorMessage.includes('key invalid');
+
+        // 检测SillyTavern API的模糊错误情况
+        const isSillyTavernApiError = errorMessage.includes('sillytavern api错误');
+
+        if (isAuthError) {
+            console.warn(`[${EXTENSION_NAME}] 检测到认证错误，清除API Key缓存:`, error.message);
+            clearCachedApiKey();
+        } else if (isSillyTavernApiError) {
+            // 对于SillyTavern API的模糊错误，也尝试清除缓存以便重试
+            console.warn(`[${EXTENSION_NAME}] SillyTavern API返回错误，清除缓存以便重试:`, error.message);
+            clearCachedApiKey();
         }
+        
+        throw error;
     }
 
     /**
-     * 获取自定义API的模型列表 (通过SillyTavern本地代理)
+     * 获取自定义API的模型列表 (简化版)
      */
     async function fetchCustomModels(baseUrl, apiKey) {
         console.log(`[${EXTENSION_NAME}] 获取自定义API模型列表`);
 
         try {
             const normalizedUrl = normalizeApiBaseUrl(baseUrl);
-            
             console.log(`[${EXTENSION_NAME}] 通过本地代理获取模型列表，目标API: ${normalizedUrl}`);
 
-            // 先设置API Key到SillyTavern secrets
+            // 设置API Key (有缓存则跳过)
             const keySetSuccess = await setCustomApiKey(apiKey);
             if (!keySetSuccess) {
                 throw new Error('无法设置API Key到SillyTavern，请检查权限');
@@ -1401,17 +1500,16 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
             // 获取CSRF令牌
             const csrfToken = await getCsrfToken();
 
-            // 使用SillyTavern本地API端点代理
+            // 调用SillyTavern本地API端点
             const response = await fetch('/api/backends/chat-completions/status', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-Token': csrfToken  // 使用动态获取的CSRF令牌
+                    'X-CSRF-Token': csrfToken
                 },
                 body: JSON.stringify({
                     chat_completion_source: 'custom',
                     custom_url: normalizedUrl
-                    // API Key应该在SillyTavern的secrets中配置，不通过参数传递
                 })
             });
 
@@ -1425,10 +1523,28 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
             // 检查是否有错误
             if (data.error) {
                 console.error(`[${EXTENSION_NAME}] SillyTavern API错误:`, data);
-                throw new Error(`SillyTavern API错误: ${data.message || '未知错误'}`);
+                
+                // 构建更详细的错误信息，包含可能的认证错误关键词
+                let errorMessage = data.message || '未知错误';
+                let errorDetails = '';
+                
+                // 检查具体的错误信息
+                if (data.data && typeof data.data === 'object') {
+                    if (data.data.error) {
+                        errorDetails = ` - ${data.data.error}`;
+                    }
+                    if (data.data.message) {
+                        errorDetails += ` - ${data.data.message}`;
+                    }
+                }
+                
+                const fullErrorMessage = `SillyTavern API错误: ${errorMessage}${errorDetails}`;
+                console.error(`[${EXTENSION_NAME}] 完整错误信息:`, fullErrorMessage);
+                
+                throw new Error(fullErrorMessage);
             }
 
-            // 解析模型列表，支持OpenAI格式
+            // 解析模型列表
             if (data.data && Array.isArray(data.data)) {
                 return data.data.map(model => ({
                     id: model.id,
@@ -1445,46 +1561,24 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
             }
 
         } catch (error) {
-            console.error(`[${EXTENSION_NAME}] 获取模型列表失败:`, error);
-            
-            // 增强错误信息
-            let enhancedError = error.message;
-            if (error.message.includes('HTTP 401')) {
-                enhancedError = 'API Key无效或未授权，请检查您的API Key';
-            } else if (error.message.includes('HTTP 403')) {
-                enhancedError = 'API访问被拒绝，请检查API Key权限';
-            } else if (error.message.includes('HTTP 404')) {
-                enhancedError = 'API端点不存在，请检查API基础URL是否正确';
-            } else if (error.message.includes('HTTP 429')) {
-                enhancedError = 'API请求过于频繁，请稍后再试';
-            } else if (error.message.includes('Failed to fetch')) {
-                // 检查是否是SSL证书错误
-                if (error.stack && error.stack.includes('ERR_CERT')) {
-                    enhancedError = 'SSL证书验证失败，请检查API地址是否正确或使用HTTPS地址';
-                } else {
-                    enhancedError = '网络连接失败，请检查API地址是否正确或网络连接';
-                }
-            } else if (error.message.includes('NetworkError')) {
-                enhancedError = '网络连接失败，请检查网络设置或API地址';
-            }
-            
-            throw new Error(enhancedError);
+            // 如果是认证错误，清除缓存
+            handleApiFailure(error);
         }
     }
 
     /**
-     * 调用自定义API (通过SillyTavern本地代理)
+     * 调用自定义API (简化版)
      */
     async function callCustomAPI(prompt, apiBaseUrl, apiKey, model) {
         console.log(`[${EXTENSION_NAME}] 调用自定义API开始`);
 
-        // 标准化基础URL
-        const normalizedBaseUrl = normalizeApiBaseUrl(apiBaseUrl);
-        
-        console.log(`[${EXTENSION_NAME}] 通过本地代理调用API，目标API: ${normalizedBaseUrl}`);
+        try {
+            // 标准化基础URL
+            const normalizedBaseUrl = normalizeApiBaseUrl(apiBaseUrl);
+            console.log(`[${EXTENSION_NAME}] 通过本地代理调用API，目标API: ${normalizedBaseUrl}`);
 
-        // 构建系统提示词
-        const systemPrompt = `你是一个专业的正则表达式专家，专门为角色扮演游戏创建状态栏文本处理规则。请根据用户的需求生成合适的正则表达式和替换内容。
+            // 构建系统提示词
+            const systemPrompt = `你是一个专业的正则表达式专家，专门为角色扮演游戏创建状态栏文本处理规则。请根据用户的需求生成合适的正则表达式和替换内容。
 
 🔥🔥🔥 强制性格式要求 - <state_bar> 标签必须包裹：
 - 你生成的示例正文内容中，状态栏部分必须被 <state_bar></state_bar> 标签完整包裹
@@ -1623,36 +1717,28 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 - 确保生成的内容符合用户的具体要求
 - 🔥🔥🔥 最重要：状态栏必须被<state_bar></state_bar>标签完整包裹，正则表达式和HTML替换内容必须配套，捕获组数量要匹配，标签名必须一致`;
 
-        // 构建对话历史上下文
-        const historyMessages = conversationHistory.buildConversationContext(prompt, 'openai');
-        console.log(`[${EXTENSION_NAME}] 历史对话数量: ${historyMessages.length / 2}`);
+            // 构建对话历史上下文
+            const historyMessages = conversationHistory.buildConversationContext(prompt, 'openai');
+            console.log(`[${EXTENSION_NAME}] 历史对话数量: ${historyMessages.length / 2}`);
 
-        // 构建完整的消息数组
-        const messages = [
-            {
-                role: "system",
-                content: systemPrompt
-            }
-        ];
+            // 构建完整的消息数组
+            const messages = [
+                {
+                    role: "system",
+                    content: systemPrompt
+                }
+            ];
 
-        // 添加历史对话
-        messages.push(...historyMessages);
+            // 添加历史对话
+            messages.push(...historyMessages);
 
-        // 添加当前用户输入
-        messages.push({
-            role: "user",
-            content: prompt
-        });
+            // 添加当前用户输入
+            messages.push({
+                role: "user",
+                content: prompt
+            });
 
-        const requestBody = {
-            model: model,
-            messages: messages,
-            temperature: 0,
-            max_tokens: 23000
-        };
-
-        try {
-            // 先设置API Key到SillyTavern secrets
+            // 设置API Key (有缓存则跳过)
             const keySetSuccess = await setCustomApiKey(apiKey);
             if (!keySetSuccess) {
                 throw new Error('无法设置API Key到SillyTavern，请检查权限');
@@ -1661,12 +1747,12 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
             // 获取CSRF令牌
             const csrfToken = await getCsrfToken();
 
-            // 使用SillyTavern本地API端点代理
+            // 调用SillyTavern本地API端点
             const response = await fetch('/api/backends/chat-completions/generate', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-Token': csrfToken  // 使用动态获取的CSRF令牌
+                    'X-CSRF-Token': csrfToken
                 },
                 body: JSON.stringify({
                     chat_completion_source: 'custom',
@@ -1675,7 +1761,6 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
                     messages: messages,
                     temperature: 0,
                     max_tokens: 23000
-                    // API Key通过secrets系统管理，不在请求参数中传递
                 })
             });
 
@@ -1685,6 +1770,29 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
             }
 
             const data = await response.json();
+            console.log(`[${EXTENSION_NAME}] 自定义API响应:`, data);
+            
+            // 检查是否有错误
+            if (data.error) {
+                console.error(`[${EXTENSION_NAME}] SillyTavern API错误:`, data);
+                
+                // 构建更详细的错误信息
+                let errorMessage = data.message || '未知错误';
+                let errorDetails = '';
+                
+                if (data.data && typeof data.data === 'object') {
+                    if (data.data.error) {
+                        errorDetails = ` - ${data.data.error}`;
+                    }
+                    if (data.data.message) {
+                        errorDetails += ` - ${data.data.message}`;
+                    }
+                }
+                
+                const fullErrorMessage = `SillyTavern API错误: ${errorMessage}${errorDetails}`;
+                throw new Error(fullErrorMessage);
+            }
+            
             const text = data.choices[0].message.content;
 
             console.log(`[${EXTENSION_NAME}] 自定义API回复:`, text);
@@ -1695,31 +1803,8 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
             return text;
 
         } catch (error) {
-            console.error(`[${EXTENSION_NAME}] 自定义API调用失败:`, error);
-            
-            // 增强错误信息
-            let enhancedError = error.message;
-            if (error.message.includes('HTTP 401')) {
-                enhancedError = '自定义API Key无效或未授权，请检查您的API Key';
-            } else if (error.message.includes('HTTP 403')) {
-                enhancedError = '自定义API访问被拒绝，请检查API Key权限';
-            } else if (error.message.includes('HTTP 404')) {
-                enhancedError = '自定义API端点不存在，请检查API基础URL是否正确';
-            } else if (error.message.includes('HTTP 429')) {
-                enhancedError = '自定义API请求过于频繁，请稍后再试';
-            } else if (error.message.includes('HTTP 400')) {
-                enhancedError = '自定义API请求格式错误，请检查模型名称或API兼容性';
-            } else if (error.message.includes('Failed to fetch')) {
-                if (error.stack && error.stack.includes('ERR_CERT')) {
-                    enhancedError = '自定义API SSL证书验证失败，请检查API地址';
-                } else {
-                    enhancedError = '无法连接到自定义API，请检查API地址和网络连接';
-                }
-            } else if (error.message.includes('NetworkError')) {
-                enhancedError = '无法连接到自定义API，请检查网络设置';
-            }
-            
-            throw new Error(enhancedError);
+            // 如果是认证错误，清除缓存
+            handleApiFailure(error);
         }
     }
 
