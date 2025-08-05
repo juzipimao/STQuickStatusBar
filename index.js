@@ -1337,23 +1337,82 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
     }
 
     /**
-     * 获取自定义API的模型列表
+     * 设置自定义API的API Key到SillyTavern secrets
+     */
+    async function setCustomApiKey(apiKey) {
+        try {
+            const csrfToken = await getCsrfToken();
+            
+            const response = await fetch('/api/secrets/write', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken
+                },
+                body: JSON.stringify({
+                    key: 'api_key_custom',
+                    value: apiKey
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`设置API Key失败: HTTP ${response.status}`);
+            }
+
+            console.log(`[${EXTENSION_NAME}] 自定义API Key已设置到SillyTavern secrets`);
+            return true;
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 设置API Key失败:`, error);
+            return false;
+        }
+    }
+
+    /**
+     * 获取CSRF令牌
+     */
+    async function getCsrfToken() {
+        try {
+            const response = await fetch('/csrf-token');
+            const data = await response.json();
+            return data.token;
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 获取CSRF令牌失败:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 获取自定义API的模型列表 (通过SillyTavern本地代理)
      */
     async function fetchCustomModels(baseUrl, apiKey) {
         console.log(`[${EXTENSION_NAME}] 获取自定义API模型列表`);
 
         try {
             const normalizedUrl = normalizeApiBaseUrl(baseUrl);
-            const modelsUrl = `${normalizedUrl}/models`;
             
-            console.log(`[${EXTENSION_NAME}] 请求模型列表URL: ${modelsUrl}`);
+            console.log(`[${EXTENSION_NAME}] 通过本地代理获取模型列表，目标API: ${normalizedUrl}`);
 
-            const response = await fetch(modelsUrl, {
-                method: 'GET',
+            // 先设置API Key到SillyTavern secrets
+            const keySetSuccess = await setCustomApiKey(apiKey);
+            if (!keySetSuccess) {
+                throw new Error('无法设置API Key到SillyTavern，请检查权限');
+            }
+
+            // 获取CSRF令牌
+            const csrfToken = await getCsrfToken();
+
+            // 使用SillyTavern本地API端点代理
+            const response = await fetch('/api/backends/chat-completions/status', {
+                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                }
+                    'X-CSRF-Token': csrfToken  // 使用动态获取的CSRF令牌
+                },
+                body: JSON.stringify({
+                    chat_completion_source: 'custom',
+                    custom_url: normalizedUrl
+                    // API Key应该在SillyTavern的secrets中配置，不通过参数传递
+                })
             });
 
             if (!response.ok) {
@@ -1362,6 +1421,12 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 
             const data = await response.json();
             console.log(`[${EXTENSION_NAME}] 模型列表响应:`, data);
+
+            // 检查是否有错误
+            if (data.error) {
+                console.error(`[${EXTENSION_NAME}] SillyTavern API错误:`, data);
+                throw new Error(`SillyTavern API错误: ${data.message || '未知错误'}`);
+            }
 
             // 解析模型列表，支持OpenAI格式
             if (data.data && Array.isArray(data.data)) {
@@ -1408,16 +1473,15 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
     }
 
     /**
-     * 调用自定义API (OpenAI格式, 支持对话历史)
+     * 调用自定义API (通过SillyTavern本地代理)
      */
     async function callCustomAPI(prompt, apiBaseUrl, apiKey, model) {
         console.log(`[${EXTENSION_NAME}] 调用自定义API开始`);
 
-        // 标准化基础URL并拼接chat/completions端点
+        // 标准化基础URL
         const normalizedBaseUrl = normalizeApiBaseUrl(apiBaseUrl);
-        const apiUrl = `${normalizedBaseUrl}/chat/completions`;
         
-        console.log(`[${EXTENSION_NAME}] 完整API请求URL: ${apiUrl}`);
+        console.log(`[${EXTENSION_NAME}] 通过本地代理调用API，目标API: ${normalizedBaseUrl}`);
 
         // 构建系统提示词
         const systemPrompt = `你是一个专业的正则表达式专家，专门为角色扮演游戏创建状态栏文本处理规则。请根据用户的需求生成合适的正则表达式和替换内容。
@@ -1588,13 +1652,31 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
         };
 
         try {
-            const response = await fetch(apiUrl, {
+            // 先设置API Key到SillyTavern secrets
+            const keySetSuccess = await setCustomApiKey(apiKey);
+            if (!keySetSuccess) {
+                throw new Error('无法设置API Key到SillyTavern，请检查权限');
+            }
+
+            // 获取CSRF令牌
+            const csrfToken = await getCsrfToken();
+
+            // 使用SillyTavern本地API端点代理
+            const response = await fetch('/api/backends/chat-completions/generate', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
+                    'X-CSRF-Token': csrfToken  // 使用动态获取的CSRF令牌
                 },
-                body: JSON.stringify(requestBody)
+                body: JSON.stringify({
+                    chat_completion_source: 'custom',
+                    custom_url: normalizedBaseUrl,
+                    model: model,
+                    messages: messages,
+                    temperature: 0,
+                    max_tokens: 23000
+                    // API Key通过secrets系统管理，不在请求参数中传递
+                })
             });
 
             if (!response.ok) {
