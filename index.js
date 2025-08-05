@@ -706,6 +706,110 @@
         console.log(`[${EXTENSION_NAME}] 设备类型: ${isMobile ? '移动设备' : '桌面设备'}`);
         
         const toolsContent = `
+            <style>
+                /* API配置区域响应式样式 */
+                .quick-regex-container {
+                    max-width: 100%;
+                    overflow-x: auto;
+                }
+                
+                .quick-regex-container .form-control {
+                    width: 100%;
+                    min-width: 0;
+                    box-sizing: border-box;
+                    word-break: break-all;
+                }
+                
+                .quick-regex-container input[type="text"],
+                .quick-regex-container input[type="password"] {
+                    max-width: 100%;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+                
+                .quick-regex-container .form-group {
+                    margin-bottom: 1rem;
+                    width: 100%;
+                }
+                
+                .quick-regex-container .api-config {
+                    width: 100%;
+                    max-width: 100%;
+                }
+                
+                /* 移动设备优化 */
+                @media screen and (max-width: 768px) {
+                    .quick-regex-container .form-control {
+                        font-size: 0.9rem;
+                        padding: 0.6rem;
+                    }
+                    
+                    .quick-regex-container .ai-generate-btn {
+                        font-size: 0.85rem;
+                        padding: 0.6rem 1rem;
+                    }
+                    
+                    .quick-regex-container small {
+                        font-size: 0.75rem;
+                    }
+                    
+                    .quick-regex-container .page-tabs {
+                        flex-wrap: wrap;
+                        gap: 0.25rem;
+                    }
+                    
+                    .quick-regex-container .tab-button {
+                        flex: 1;
+                        min-width: 120px;
+                    }
+                }
+                
+                /* 平板设备优化 */
+                @media screen and (min-width: 769px) and (max-width: 1024px) {
+                    .quick-regex-container .form-control {
+                        font-size: 0.95rem;
+                    }
+                }
+                
+                /* 桌面设备优化 */
+                @media screen and (min-width: 1025px) {
+                    .quick-regex-container .form-group {
+                        margin-bottom: 1.25rem;
+                    }
+                }
+                
+                /* URL输入框特殊处理 */
+                #custom-api-url {
+                    font-family: 'Courier New', monospace;
+                    font-size: 0.85rem;
+                    letter-spacing: -0.5px;
+                }
+                
+                /* 确保按钮不会变形 */
+                .quick-regex-container .ai-generate-btn {
+                    white-space: nowrap;
+                    min-height: 2.5rem;
+                    width: 100%;
+                    display: block;
+                }
+                
+                /* 标签页响应式 */
+                .quick-regex-container .page-tabs {
+                    display: flex;
+                    width: 100%;
+                }
+                
+                /* 解决长URL显示问题 */
+                .quick-regex-container .form-control[type="text"] {
+                    direction: rtl;
+                    text-align: left;
+                }
+                
+                .quick-regex-container .form-control[type="text"]:focus {
+                    direction: ltr;
+                }
+            </style>
+            
             <div id="quick-regex-tools" class="quick-regex-container">
                 <div class="quick-regex-header">
                     <h4>快速正则工具</h4>
