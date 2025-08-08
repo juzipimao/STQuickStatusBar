@@ -48,7 +48,8 @@
         customModel: '',
         // 对话历史设置
         enableConversationHistory: true,
-        maxHistoryLength: 10
+        // 使用 Infinity 表示不限制历史条数
+        maxHistoryLength: Infinity
     };
 
     // 扩展是否已初始化
@@ -60,7 +61,9 @@
     class ConversationHistoryManager {
         constructor() {
             this.storageKey = 'STQuickStatusBar_ConversationHistory';
-            this.maxHistory = extensionSettings.maxHistoryLength || 10;
+            this.maxHistory = (extensionSettings.maxHistoryLength === undefined || extensionSettings.maxHistoryLength === null)
+                ? Infinity
+                : extensionSettings.maxHistoryLength;
         }
 
         /**
@@ -114,8 +117,8 @@
                 // 添加到历史开头
                 history.unshift(newEntry);
 
-                // 限制历史长度
-                if (history.length > this.maxHistory) {
+                // 限制历史长度（Infinity 表示不限制）
+                if (Number.isFinite(this.maxHistory) && this.maxHistory > 0 && history.length > this.maxHistory) {
                     history.splice(this.maxHistory);
                     console.log(`[${EXTENSION_NAME}] 历史记录已截断到 ${this.maxHistory} 条`);
                 }
@@ -157,8 +160,8 @@
             const history = this.getHistory();
             const messages = [];
 
-            // 添加历史对话（最近的5条，避免token过多）
-            const recentHistory = history.slice(0, 5);
+            // 添加全部历史对话（不限制条数）
+            const recentHistory = history; // 不再切片，使用全部历史
             for (const entry of recentHistory.reverse()) { // 按时间顺序
                 if (apiType === 'gemini') {
                     // Gemini格式：user/model
@@ -202,6 +205,12 @@
          * 更新最大历史长度
          */
         updateMaxHistory(newMax) {
+            // 处理不限制的情况
+            if (!Number.isFinite(newMax) || newMax <= 0) {
+                this.maxHistory = Infinity;
+                return;
+            }
+
             this.maxHistory = newMax;
 
             // 如果当前历史超过新的限制，进行截断
