@@ -347,6 +347,22 @@
             }
         }
 
+        // 插件变量存储（嵌套 JSON，不影响宏用的通用变量）
+        getAllPluginVariablesData() {
+            if (this.useGlobalScope()) {
+                if (!extension_settings[EXTENSION_NAME]) extension_settings[EXTENSION_NAME] = {};
+                if (!extension_settings[EXTENSION_NAME].variablesPlugin) extension_settings[EXTENSION_NAME].variablesPlugin = {};
+                return extension_settings[EXTENSION_NAME].variablesPlugin;
+            } else {
+                const ctx = typeof getContext === 'function' ? getContext() : null;
+                const meta = ctx?.chatMetadata ?? chat_metadata;
+                if (!meta.plugin_variables) meta.plugin_variables = {};
+                if (!meta.plugin_variables[EXTENSION_NAME]) meta.plugin_variables[EXTENSION_NAME] = {};
+                if (!meta.plugin_variables[EXTENSION_NAME].variables) meta.plugin_variables[EXTENSION_NAME].variables = {};
+                return meta.plugin_variables[EXTENSION_NAME].variables;
+            }
+        }
+
         /**
          * 保存所有变量数据
          */
@@ -376,20 +392,72 @@
         }
 
         /**
+         * 保存插件变量（嵌套 JSON，含描述）
+         * 与通用变量分开存储，避免影响宏读取
+         */
+        async saveAllPluginVariablesData(data) {
+            try {
+                if (this.useGlobalScope()) {
+                    if (!extension_settings[EXTENSION_NAME]) extension_settings[EXTENSION_NAME] = {};
+                    extension_settings[EXTENSION_NAME].variablesPlugin = data || {};
+                    if (typeof saveSettingsDebounced === 'function') saveSettingsDebounced();
+                } else {
+                    const ctx = typeof getContext === 'function' ? getContext() : null;
+                    const meta = ctx?.chatMetadata ?? chat_metadata ?? {};
+                    if (!meta.plugin_variables) meta.plugin_variables = {};
+                    if (!meta.plugin_variables[EXTENSION_NAME]) meta.plugin_variables[EXTENSION_NAME] = {};
+                    meta.plugin_variables[EXTENSION_NAME].variables = data || {};
+                    if (typeof saveMetadataDebounced === 'function') saveMetadataDebounced();
+                    if (ctx && typeof ctx.saveMetadata === 'function') {
+                        try { await ctx.saveMetadata(); } catch (_) {}
+                    }
+                }
+                return true;
+            } catch (err) {
+                console.error(`[${EXTENSION_NAME}] 保存插件变量失败:`, err);
+                return false;
+            }
+        }
+
+        /**
          * 获取当前会话的变量列表
          */
-        // 将底层对象映射为列表供UI展示
+        // 将底层对象映射为列表供UI展示（包含通用与插件两类）
         getSessionVariables(_sessionId = null) {
-            const store = this.getAllVariablesData();
-            const entries = Object.entries(store || {});
-            return entries.map(([name, value]) => ({
-                id: name,
-                name,
-                value: typeof value === 'string' ? value : JSON.stringify(value),
-                description: '',
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-            }));
+            const generic = this.getAllVariablesData();
+            const plugin = this.getAllPluginVariablesData();
+
+            const result = [];
+
+            for (const [name, value] of Object.entries(generic || {})) {
+                result.push({
+                    id: `generic:${name}`,
+                    name,
+                    value: typeof value === 'string' ? value : JSON.stringify(value),
+                    description: '',
+                    type: 'generic',
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                });
+            }
+
+            for (const [name, obj] of Object.entries(plugin || {})) {
+                const val = obj?.value;
+                const desc = obj?.description ?? '';
+                const created = obj?.createdAt ?? new Date().toISOString();
+                const updated = obj?.updatedAt ?? created;
+                result.push({
+                    id: `plugin:${name}`,
+                    name,
+                    value: typeof val === 'string' ? val : JSON.stringify(val),
+                    description: typeof desc === 'string' ? desc : JSON.stringify(desc),
+                    type: 'plugin',
+                    createdAt: created,
+                    updatedAt: updated,
+                });
+            }
+
+            return result;
         }
 
         /**
@@ -415,35 +483,62 @@
         /**
          * 添加变量到当前会话
          */
-        async addVariable(name, value, description = '') {
+        async addVariable(name, value, description = '', insertType = 'plugin') {
             try {
                 const trimmed = String(name || '').trim();
                 if (!trimmed) return null;
-                if (this.useGlobalScope()) {
-                    if (typeof setGlobalVariable === 'function') {
-                        setGlobalVariable(trimmed, String(value ?? ''));
+                let newVariable;
+                const wantPlugin = insertType === 'plugin' || insertType === 'both';
+                const wantGeneric = insertType === 'generic' || insertType === 'both';
+
+                if (wantGeneric) {
+                    if (this.useGlobalScope()) {
+                        if (typeof setGlobalVariable === 'function') {
+                            setGlobalVariable(trimmed, String(value ?? ''));
+                        } else {
+                            const store = this.getAllVariablesData();
+                            store[trimmed] = String(value ?? '');
+                            await this.saveAllVariablesData(store);
+                        }
                     } else {
-                        const store = this.getAllVariablesData();
-                        store[trimmed] = String(value ?? '');
-                        this.saveAllVariablesData(store);
+                        if (typeof setLocalVariable === 'function') {
+                            setLocalVariable(trimmed, String(value ?? ''));
+                        } else {
+                            const store = this.getAllVariablesData();
+                            store[trimmed] = String(value ?? '');
+                            await this.saveAllVariablesData(store);
+                        }
                     }
-                } else {
-                    if (typeof setLocalVariable === 'function') {
-                        setLocalVariable(trimmed, String(value ?? ''));
-                    } else {
-                        const store = this.getAllVariablesData();
-                        store[trimmed] = String(value ?? '');
-                        this.saveAllVariablesData(store);
-                    }
+                    newVariable = {
+                        id: `generic:${trimmed}`,
+                        name: trimmed,
+                        value: String(value ?? ''),
+                        description,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                        type: 'generic',
+                    };
                 }
-                const newVariable = {
-                    id: trimmed,
-                    name: trimmed,
-                    value: String(value ?? ''),
-                    description,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                };
+
+                if (wantPlugin) {
+                    const pluginStore = this.getAllPluginVariablesData();
+                    pluginStore[trimmed] = {
+                        value: String(value ?? ''),
+                        description: String(description ?? ''),
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                    };
+                    await this.saveAllPluginVariablesData(pluginStore);
+                    newVariable = {
+                        id: `plugin:${trimmed}`,
+                        name: trimmed,
+                        value: String(value ?? ''),
+                        description,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                        type: 'plugin',
+                    };
+                }
                 await this.updateVariablesDisplay();
                 return newVariable;
             } catch (error) {
@@ -457,9 +552,18 @@
          */
         async deleteVariable(variableId) {
             try {
+                const [type, name] = String(variableId).split(':');
+                if (type === 'plugin') {
+                    const pStore = this.getAllPluginVariablesData();
+                    if (!(name in pStore)) return false;
+                    delete pStore[name];
+                    const success = await this.saveAllPluginVariablesData(pStore);
+                    if (success) await this.updateVariablesDisplay();
+                    return success;
+                }
                 const store = this.getAllVariablesData();
-                if (!(variableId in store)) return false;
-                delete store[variableId];
+                if (!(name in store)) return false;
+                delete store[name];
                 const success = await this.saveAllVariablesData(store);
                 if (success) await this.updateVariablesDisplay();
                 return success;
@@ -475,19 +579,40 @@
         async updateVariable(variableId, name, value, description = '') {
             try {
                 const newName = String(name || '').trim();
-                const store = this.getAllVariablesData();
-                if (!(variableId in store) && !(newName in store)) {
-                    // 若为重命名新建
-                    store[newName] = String(value ?? '');
-                } else {
-                    if (variableId !== newName && (variableId in store)) {
-                        delete store[variableId];
+                const [type, oldNameRaw] = String(variableId).split(':');
+                const oldName = oldNameRaw || newName;
+
+                if (type === 'plugin') {
+                    // 更新插件变量，并同步更新通用变量值
+                    const pStore = this.getAllPluginVariablesData();
+                    if (oldName !== newName && pStore[oldName]) {
+                        delete pStore[oldName];
                     }
+                    pStore[newName] = {
+                        value: String(value ?? ''),
+                        description: String(description ?? ''),
+                        createdAt: pStore[newName]?.createdAt || new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                    };
+                    await this.saveAllPluginVariablesData(pStore);
+
+                    // 同步写入通用变量
+                    const store = this.getAllVariablesData();
+                    if (oldName !== newName && store[oldName]) delete store[oldName];
                     store[newName] = String(value ?? '');
+                    await this.saveAllVariablesData(store);
+
+                    await this.updateVariablesDisplay();
+                    return { id: `plugin:${newName}`, name: newName, value: String(value ?? ''), description, updatedAt: new Date().toISOString() };
+                } else {
+                    // 仅更新通用变量
+                    const store = this.getAllVariablesData();
+                    if (oldName !== newName && store[oldName]) delete store[oldName];
+                    store[newName] = String(value ?? '');
+                    await this.saveAllVariablesData(store);
+                    await this.updateVariablesDisplay();
+                    return { id: `generic:${newName}`, name: newName, value: String(value ?? ''), description, updatedAt: new Date().toISOString() };
                 }
-                await this.saveAllVariablesData(store);
-                await this.updateVariablesDisplay();
-                return { id: newName, name: newName, value: String(value ?? ''), description, updatedAt: new Date().toISOString() };
             } catch (error) {
                 console.error(`[${EXTENSION_NAME}] 更新变量失败:`, error);
                 return null;
@@ -500,6 +625,7 @@
         async clearSessionVariables() {
             try {
                 await this.saveAllVariablesData({});
+                await this.saveAllPluginVariablesData({});
                 await this.updateVariablesDisplay();
                 return true;
             } catch (error) {
@@ -653,10 +779,18 @@
             if (searchText.trim()) {
                 const search = searchText.toLowerCase();
                 filteredVariables = variables.filter(variable => 
-                    variable.name.toLowerCase().includes(search) ||
-                    variable.value.toLowerCase().includes(search) ||
-                    (variable.description && variable.description.toLowerCase().includes(search))
+                    (variable.name && variable.name.toLowerCase().includes(search)) ||
+                    (variable.value && String(variable.value).toLowerCase().includes(search)) ||
+                    (variable.description && String(variable.description).toLowerCase().includes(search)) ||
+                    (variable.type && variable.type.toLowerCase().includes(search))
                 );
+            }
+
+            // 类型过滤
+            const typeSelector = document.getElementById('variables-type-filter');
+            const typeFilter = typeSelector ? typeSelector.value : 'all';
+            if (typeFilter !== 'all') {
+                filteredVariables = filteredVariables.filter(v => v.type === typeFilter);
             }
 
             // 更新计数
@@ -681,6 +815,7 @@
                 <table class="variables-editor-table">
                     <thead>
                         <tr>
+                            <th>类型</th>
                             <th>变量名</th>
                             <th>变量值</th>
                             <th>变量作用</th>
@@ -702,6 +837,7 @@
 
                 html += `
                     <tr data-variable-id="${variable.id}">
+                        <td class="variable-type-cell">${variable.type === 'plugin' ? '插件' : '通用'}</td>
                         <td class="variable-name-cell">${this.escapeHtml(variable.name)}</td>
                         <td class="variable-value-cell">${this.escapeHtml(variable.value)}</td>
                         <td class="variable-description-cell">${this.escapeHtml(variable.description || '无描述')}</td>
@@ -814,6 +950,7 @@
             let html = `
                 <div class="variables-table">
                     <div class="table-header">
+                        <div class="header-cell type-col">类型</div>
                         <div class="header-cell name-col">变量名</div>
                         <div class="header-cell value-col">变量值</div>
                         <div class="header-cell desc-col">变量作用</div>
@@ -834,6 +971,7 @@
                 
                 html += `
                     <div class="table-row" data-variable-id="${variable.id}">
+                        <div class="table-cell type-col" data-label="类型">${variable.type === 'plugin' ? '插件' : '通用'}</div>
                         <div class="table-cell name-col" data-label="变量名">
                             <span class="variable-name">${this.escapeHtml(variable.name)}</span>
                         </div>
@@ -1160,24 +1298,32 @@
         }
 
         /**
-         * 渲染变量到编辑器
+         * 渲染变量到编辑器（覆盖层）
          */
         async renderVariablesToEditor(searchText = '') {
             const container = document.getElementById('variables-editor-table-container');
             const countElement = document.getElementById('editor-search-count');
             if (!container) return;
 
-            const variables = this.getSessionVariables();
+            const variables = await this.getSessionVariables();
             let filteredVariables = variables;
 
-            // 应用搜索过滤
+            // 搜索过滤
             if (searchText.trim()) {
                 const search = searchText.toLowerCase();
-                filteredVariables = variables.filter(variable => 
-                    variable.name.toLowerCase().includes(search) ||
-                    variable.value.toLowerCase().includes(search) ||
-                    (variable.description && variable.description.toLowerCase().includes(search))
+                filteredVariables = variables.filter(variable =>
+                    (variable.name && variable.name.toLowerCase().includes(search)) ||
+                    (variable.value && String(variable.value).toLowerCase().includes(search)) ||
+                    (variable.description && String(variable.description).toLowerCase().includes(search)) ||
+                    (variable.type && variable.type.toLowerCase().includes(search))
                 );
+            }
+
+            // 类型过滤
+            const typeSelector = document.getElementById('variables-type-filter');
+            const typeFilter = typeSelector ? typeSelector.value : 'all';
+            if (typeFilter !== 'all') {
+                filteredVariables = filteredVariables.filter(v => v.type === typeFilter);
             }
 
             // 更新计数
@@ -1188,12 +1334,11 @@
                 }
             }
 
-            // 渲染变量表格
             if (filteredVariables.length === 0) {
                 container.innerHTML = `
                     <div class="variables-editor-empty">
-                        <h3>暂无变量</h3>
-                        <p>${searchText.trim() ? '没有匹配的变量' : '当前会话还没有创建任何变量'}</p>
+                        <h3>${searchText.trim() ? '未找到匹配的变量' : '暂无变量'}</h3>
+                        <p>${searchText.trim() ? '尝试修改搜索条件' : '添加第一个变量来开始使用'}</p>
                     </div>
                 `;
                 return;
@@ -1203,6 +1348,7 @@
                 <table class="variables-editor-table">
                     <thead>
                         <tr>
+                            <th>类型</th>
                             <th>变量名</th>
                             <th>变量值</th>
                             <th>变量作用</th>
@@ -1224,6 +1370,7 @@
 
                 html += `
                     <tr data-variable-id="${variable.id}">
+                        <td class="variable-type-cell">${variable.type === 'plugin' ? '插件' : '通用'}</td>
                         <td class="variable-name-cell">${this.escapeHtml(variable.name)}</td>
                         <td class="variable-value-cell">${this.escapeHtml(variable.value)}</td>
                         <td class="variable-description-cell">${this.escapeHtml(variable.description || '无描述')}</td>
@@ -1267,7 +1414,9 @@
             variables.forEach(variable => {
                 html += `
                     <div class="variable-item" data-variable-id="${variable.id}">
-                        <div class="variable-name">${this.escapeHtml(variable.name)}</div>
+                        <div class="variable-name">${this.escapeHtml(variable.name)}
+                            <span class="variable-badge" title="类型">${variable.type === 'plugin' ? '插件' : '通用'}</span>
+                        </div>
                         <div class="variable-value">${this.escapeHtml(variable.value)}</div>
                         ${variable.description ? `<div class="variable-description">${this.escapeHtml(variable.description)}</div>` : ''}
                     </div>
@@ -2257,6 +2406,14 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
                                     <input type="text" id="variable-value" class="form-control" 
                                            placeholder="例如: 健康">
                                 </div>
+                                <div class="form-col">
+                                    <label for="variable-type">变量类型:</label>
+                                    <select id="variable-type" class="form-control">
+                                        <option value="plugin">插件变量（含描述，嵌套JSON）</option>
+                                        <option value="generic">通用变量（宏可用）</option>
+                                        <option value="both">同时创建（插件+通用）</option>
+                                    </select>
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label for="variable-description">变量作用:</label>
@@ -2309,7 +2466,12 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
                     </div>
                     <div class="variables-editor-content">
                         <div class="variables-editor-search">
-                            <input type="text" id="variables-search-input" class="variables-search-input" placeholder="搜索变量名或值...">
+                            <input type="text" id="variables-search-input" class="variables-search-input" placeholder="搜索变量名/值/描述...">
+                            <select id="variables-type-filter" class="variables-type-filter">
+                                <option value="all">全部</option>
+                                <option value="plugin">插件变量</option>
+                                <option value="generic">通用变量</option>
+                            </select>
                             <span class="search-count" id="editor-search-count">共 0 个变量</span>
                         </div>
                         <div id="variables-editor-table-container">
@@ -5637,6 +5799,11 @@ ${bodyMatch[1]}
             const searchText = this.value;
             await variablesManager.searchVariables(searchText);
         });
+        // 类型过滤
+        $(document).off('change', '#variables-type-filter').on('change', '#variables-type-filter', async function() {
+            const searchText = $('#variables-search-input').val() || '';
+            await variablesManager.renderVariablesToEditor(String(searchText));
+        });
         
         // 点击编辑器覆盖层关闭编辑器（点击背景关闭）
         $(document).off('click', '#variables-editor-overlay').on('click', '#variables-editor-overlay', function(event) {
@@ -5661,30 +5828,34 @@ ${bodyMatch[1]}
             const name = document.getElementById('variable-name')?.value?.trim();
             const value = document.getElementById('variable-value')?.value || '';
             const description = document.getElementById('variable-description')?.value?.trim() || '';
+            const insertType = (document.getElementById('variable-type')?.value || 'plugin').toLowerCase();
 
             if (!name) {
                 showStatus('变量名不能为空', true);
                 return;
             }
 
-            const variable = await variablesManager.addVariable(name, value, description);
+            const variable = await variablesManager.addVariable(name, value, description, insertType);
             if (variable) {
                 // 清空表单
                 document.getElementById('variable-name').value = '';
                 document.getElementById('variable-value').value = '';
                 document.getElementById('variable-description').value = '';
+                // 类型不清空，便于连续添加同类
                 
-                showStatus(`变量 "${name}" 已添加`);
+                const typeLabel = insertType === 'generic' ? '通用变量' : (insertType === 'both' ? '插件+通用变量' : '插件变量');
+                showStatus(`变量 "${name}" 已添加（${typeLabel}）`);
                 
                 if (toastr) {
-                    toastr.success(`变量 "${name}" 已添加`, '成功');
+                    toastr.success(`变量 "${name}" 已添加（${typeLabel}）`, '成功');
                 }
             } else {
                 showStatus('添加变量失败', true);
             }
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 添加变量失败:`, error);
-            showStatus('添加变量失败', true);
+            const msg = error?.message ? `添加变量失败：${error.message}` : '添加变量失败';
+            showStatus(msg, true);
         }
     }
 
