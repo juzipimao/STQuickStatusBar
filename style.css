@@ -1,5 +1,365 @@
 /* ST快速状态栏扩展样式 */
 
+/* === 变量页面简洁样式 === */
+.variables-simple-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.session-info-display {
+    display: flex;
+    gap: 20px;
+    padding: 15px;
+    background: var(--SmartThemeBlurTintColor);
+    border: 2px solid #888888;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.session-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.session-label {
+    font-weight: 600;
+    color: var(--SmartThemeEmColor);
+}
+
+.session-value {
+    color: var(--SmartThemeQuoteColor);
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+.add-variable-section {
+    background: var(--SmartThemeBlurTintColor);
+    border: 2px solid #888888;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.add-variable-section h4 {
+    margin: 0 0 15px 0;
+    color: var(--SmartThemeEmColor);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.variables-management-section {
+    background: var(--SmartThemeBlurTintColor);
+    border: 2px solid #888888;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.variables-management-section h4 {
+    margin: 0 0 15px 0;
+    color: var(--SmartThemeEmColor);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.management-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.batch-controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* 在批量控制容器中的按钮，不要占满宽度 */
+.batch-controls .ai-preview-btn {
+    width: auto;
+    flex: 1;
+    min-width: 100px;
+}
+
+/* 确保变量页面所有输入框都是黑色背景 */
+.variables-simple-container .form-control,
+.variables-simple-container textarea.form-control,
+.variables-simple-container input.form-control {
+    background: #1a1a1a !important;
+    color: #ffffff !important;
+    border: 1px solid #888888 !important;
+}
+
+.variables-simple-container .form-control:focus,
+.variables-simple-container textarea.form-control:focus,
+.variables-simple-container input.form-control:focus {
+    background: #1a1a1a !important;
+    border-color: #aaaaaa !important;
+    box-shadow: 0 0 0 2px rgba(170, 170, 170, 0.3) !important;
+}
+
+/* 变量编辑器全屏样式 */
+.variables-editor-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 10000;
+    display: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.variables-editor-overlay.active {
+    display: flex;
+    opacity: 1;
+}
+
+.variables-editor-container {
+    width: 90%;
+    max-width: 1200px;
+    height: 90%;
+    max-height: 800px;
+    margin: auto;
+    background: #1a1a1a; /* 强制黑色背景 */
+    border: 2px solid #888888;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.variables-editor-header {
+    background: #2a2a2a; /* 稍浅的黑色 */
+    border-bottom: 2px solid #888888;
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.variables-editor-title {
+    margin: 0;
+    color: var(--SmartThemeEmColor);
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.variables-editor-controls {
+    display: flex;
+    gap: 10px;
+}
+
+.editor-control-btn {
+    padding: 8px 16px;
+    background: var(--SmartThemeBodyColor);
+    color: var(--SmartThemeEmColor);
+    border: 1px solid #888888;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.editor-control-btn:hover {
+    background: var(--SmartThemeBlurTintColor);
+}
+
+.editor-close-btn {
+    background: #dc3545;
+    color: white;
+    border: 1px solid #c82333;
+}
+
+.editor-close-btn:hover {
+    background: #c82333;
+}
+
+.variables-editor-content {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.variables-editor-search {
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.variables-search-input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid #888888;
+    border-radius: 6px;
+    background: #1a1a1a; /* 黑色背景 */
+    color: #ffffff; /* 白色文本 */
+    font-size: 14px;
+}
+
+.variables-search-input:focus {
+    outline: none;
+    border-color: var(--SmartThemeQuoteColor);
+}
+
+.variables-editor-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #2a2a2a; /* 黑色背景 */
+    border: 1px solid #888888;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.variables-editor-table th {
+    background: #1a1a1a; /* 深黑色背景 */
+    color: #ffffff; /* 白色文本 */
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid #888888;
+}
+
+.variables-editor-table td {
+    padding: 12px;
+    border-bottom: 1px solid #888888;
+    color: #ffffff; /* 白色文本 */
+    vertical-align: top;
+}
+
+.variables-editor-table tr:hover {
+    background: #333333; /* 悬停时的深灰色 */
+}
+
+.variables-editor-table tr:last-child td {
+    border-bottom: none;
+}
+
+.variable-name-cell {
+    font-weight: 600;
+    max-width: 150px;
+    word-break: break-word;
+}
+
+.variable-value-cell {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    max-width: 200px;
+    word-break: break-word;
+    background: rgba(255, 255, 255, 0.1); /* 浅白色背景适合黑色主题 */
+    border-radius: 4px;
+    padding: 4px 8px;
+}
+
+.variable-description-cell {
+    max-width: 250px;
+    word-break: break-word;
+    font-size: 13px;
+    color: #cccccc; /* 浅灰色文本适合黑色背景 */
+}
+
+.variable-time-cell {
+    font-size: 12px;
+    color: #aaaaaa; /* 更浅的灰色 */
+    font-family: monospace;
+    white-space: nowrap;
+}
+
+.variable-actions-cell {
+    white-space: nowrap;
+}
+
+.variable-action-btn {
+    padding: 4px 8px;
+    margin: 0 2px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.variable-edit-btn {
+    background: #28a745;
+    color: white;
+}
+
+.variable-edit-btn:hover {
+    background: #218838;
+}
+
+.variable-delete-btn {
+    background: #dc3545;
+    color: white;
+}
+
+.variable-delete-btn:hover {
+    background: #c82333;
+}
+
+.variables-editor-empty {
+    text-align: center;
+    padding: 40px;
+    color: #cccccc; /* 浅灰色适合黑色背景 */
+}
+
+.variables-editor-empty h3 {
+    margin: 0 0 10px 0;
+    font-size: 18px;
+    color: #ffffff; /* 白色标题 */
+}
+
+.variables-editor-empty p {
+    margin: 0;
+    font-size: 14px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .variables-editor-container {
+        width: 95%;
+        height: 95%;
+    }
+    
+    .variables-editor-header {
+        padding: 15px;
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
+    
+    .session-info-display {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .batch-controls {
+        flex-direction: column;
+    }
+    
+    .variables-editor-search {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .variables-editor-table {
+        font-size: 12px;
+    }
+    
+    .variables-editor-table th,
+    .variables-editor-table td {
+        padding: 8px;
+    }
+    
+    .variable-name-cell,
+    .variable-value-cell,
+    .variable-description-cell {
+        max-width: none;
+    }
+}
+
 /* === 扩展设置面板样式 === */
 #STQuickStatusBar-settings {
     margin: 10px 0;
@@ -157,7 +517,7 @@
 .api-config h4 {
     margin: 0 0 10px 0;
     color: var(--SmartThemeEmColor);
-    font-size: 14px;
+    font-size: 14px;/
     font-weight: 600;
 }
 
@@ -846,9 +1206,10 @@ input[type="password"].form-control:focus {
 
 /* === 禁用状态样式 === */
 .form-control:disabled {
-    background: var(--SmartThemeBlurTintColor);
+    background: #1a1a1a !important; /* 强制黑色背景 */
     opacity: 0.6;
     cursor: not-allowed;
+    color: #888888 !important; /* 禁用状态的文本颜色 */
 }
 
 /* === 选择框特殊样式 === */

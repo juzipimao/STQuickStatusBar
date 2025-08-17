@@ -28,6 +28,10 @@
     let uuidv4, toastr;
     let loadRegexScripts, reloadCurrentChat, getCurrentChatId;
     let eventSource, event_types; // 添加事件系统导入
+    let extension_settings, saveSettingsDebounced; // 添加设置管理导入
+    let chat_metadata, saveMetadataDebounced; // 本地变量保存与访问
+    // 变量读写（与项目宏一致）
+    let getLocalVariable, setLocalVariable, getGlobalVariable, setGlobalVariable;
 
     // 默认设置
     let extensionSettings = {
@@ -49,7 +53,9 @@
         // 对话历史设置
         enableConversationHistory: true,
         // 使用 Infinity 表示不限制历史条数
-        maxHistoryLength: Infinity
+        maxHistoryLength: Infinity,
+        // 变量范围：global（与 {{getglobalvar}} 一致）或 local（与 {{getvar}} 一致）
+        variablesScope: 'local',
     };
 
     // 扩展是否已初始化
@@ -266,8 +272,1145 @@
         }
     }
 
-    // 创建历史管理实例
+    /**
+     * 变量管理类 - 使用SillyTavern标准扩展模式
+     */
+    class VariablesManager {
+        constructor() {
+            this.currentSessionId = null;
+        }
+
+        /**
+         * 获取当前会话ID
+         */
+        getCurrentSessionId() {
+            try {
+                if (typeof getCurrentChatId === 'function') {
+                    const chatId = getCurrentChatId();
+                    console.log(`[${EXTENSION_NAME}] 获取当前聊天ID:`, chatId);
+                    return chatId;
+                }
+                
+                // 备用方案：从context获取
+                if (typeof getContext === 'function') {
+                    const context = getContext();
+                    if (context && context.characterId) {
+                        return context.characterId;
+                    }
+                }
+                
+                // 最后的备用方案
+                return 'default_session';
+            } catch (error) {
+                console.warn(`[${EXTENSION_NAME}] 获取会话ID失败，使用默认值:`, error);
+                return 'default_session';
+            }
+        }
+
+        /**
+         * 设置当前会话ID
+         */
+        setCurrentSessionId(sessionId) {
+            this.currentSessionId = sessionId;
+            console.log(`[${EXTENSION_NAME}] 当前会话ID已设置为:`, sessionId);
+        }
+
+        /**
+         * 获取所有变量数据
+         */
+        // 是否使用全局变量存储
+        useGlobalScope() {
+            try {
+                const scope = (extensionSettings?.variablesScope || 'global').toLowerCase();
+                return scope !== 'local';
+            } catch { return true; }
+        }
+
+        // 直接返回底层存储对象（与项目宏一致）
+        getAllVariablesData() {
+            if (this.useGlobalScope()) {
+                if (!extension_settings?.variables) {
+                    extension_settings.variables = { global: {} };
+                }
+                if (!extension_settings.variables.global) {
+                    extension_settings.variables.global = {};
+                }
+                return extension_settings.variables.global;
+            } else {
+                // 通过上下文获取最新的 chatMetadata 引用，避免捕获过期对象
+                const ctx = typeof getContext === 'function' ? getContext() : null;
+                const meta = ctx?.chatMetadata ?? chat_metadata;
+                if (!meta.variables) {
+                    meta.variables = {};
+                }
+                return meta.variables;
+            }
+        }
+
+        /**
+         * 保存所有变量数据
+         */
+        async saveAllVariablesData(data) {
+            try {
+                if (this.useGlobalScope()) {
+                    // 写入全局变量对象并持久化
+                    if (!extension_settings.variables) extension_settings.variables = { global: {} };
+                    extension_settings.variables.global = data || {};
+                    if (typeof saveSettingsDebounced === 'function') saveSettingsDebounced();
+                } else {
+                    // 写入本地变量对象并持久化（始终通过 context 引用，避免失效）
+                    const ctx = typeof getContext === 'function' ? getContext() : null;
+                    const meta = ctx?.chatMetadata ?? chat_metadata ?? {};
+                    meta.variables = data || {};
+                    if (typeof saveMetadataDebounced === 'function') saveMetadataDebounced();
+                    // 立即强制保存，避免用户立刻查看文件时未落盘
+                    if (ctx && typeof ctx.saveMetadata === 'function') {
+                        try { await ctx.saveMetadata(); } catch (_) {}
+                    }
+                }
+                return true;
+            } catch (err) {
+                console.error(`[${EXTENSION_NAME}] 保存变量失败:`, err);
+                return false;
+            }
+        }
+
+        /**
+         * 获取当前会话的变量列表
+         */
+        // 将底层对象映射为列表供UI展示
+        getSessionVariables(_sessionId = null) {
+            const store = this.getAllVariablesData();
+            const entries = Object.entries(store || {});
+            return entries.map(([name, value]) => ({
+                id: name,
+                name,
+                value: typeof value === 'string' ? value : JSON.stringify(value),
+                description: '',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            }));
+        }
+
+        /**
+         * 初始化存储系统
+         */
+        initializeStorage() {
+            try {
+                // 确保存储对象存在（与核心宏一致）
+                if (this.useGlobalScope()) {
+                    if (!extension_settings.variables) extension_settings.variables = { global: {} };
+                    if (!extension_settings.variables.global) extension_settings.variables.global = {};
+                    console.log(`[${EXTENSION_NAME}] 存储系统初始化完成，使用全局变量 extension_settings.variables.global`);
+                } else {
+                    if (!chat_metadata) chat_metadata = {};
+                    if (!chat_metadata.variables) chat_metadata.variables = {};
+                    console.log(`[${EXTENSION_NAME}] 存储系统初始化完成，使用本地变量 chat_metadata.variables`);
+                }
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 存储系统初始化失败:`, error);
+                throw error;
+            }
+        }
+        /**
+         * 添加变量到当前会话
+         */
+        async addVariable(name, value, description = '') {
+            try {
+                const trimmed = String(name || '').trim();
+                if (!trimmed) return null;
+                if (this.useGlobalScope()) {
+                    if (typeof setGlobalVariable === 'function') {
+                        setGlobalVariable(trimmed, String(value ?? ''));
+                    } else {
+                        const store = this.getAllVariablesData();
+                        store[trimmed] = String(value ?? '');
+                        this.saveAllVariablesData(store);
+                    }
+                } else {
+                    if (typeof setLocalVariable === 'function') {
+                        setLocalVariable(trimmed, String(value ?? ''));
+                    } else {
+                        const store = this.getAllVariablesData();
+                        store[trimmed] = String(value ?? '');
+                        this.saveAllVariablesData(store);
+                    }
+                }
+                const newVariable = {
+                    id: trimmed,
+                    name: trimmed,
+                    value: String(value ?? ''),
+                    description,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                };
+                await this.updateVariablesDisplay();
+                return newVariable;
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 添加变量失败:`, error);
+                return null;
+            }
+        }
+
+        /**
+         * 删除变量
+         */
+        async deleteVariable(variableId) {
+            try {
+                const store = this.getAllVariablesData();
+                if (!(variableId in store)) return false;
+                delete store[variableId];
+                const success = await this.saveAllVariablesData(store);
+                if (success) await this.updateVariablesDisplay();
+                return success;
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 删除变量失败:`, error);
+                return false;
+            }
+        }
+
+        /**
+         * 更新变量 - 支持异步
+         */
+        async updateVariable(variableId, name, value, description = '') {
+            try {
+                const newName = String(name || '').trim();
+                const store = this.getAllVariablesData();
+                if (!(variableId in store) && !(newName in store)) {
+                    // 若为重命名新建
+                    store[newName] = String(value ?? '');
+                } else {
+                    if (variableId !== newName && (variableId in store)) {
+                        delete store[variableId];
+                    }
+                    store[newName] = String(value ?? '');
+                }
+                await this.saveAllVariablesData(store);
+                await this.updateVariablesDisplay();
+                return { id: newName, name: newName, value: String(value ?? ''), description, updatedAt: new Date().toISOString() };
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 更新变量失败:`, error);
+                return null;
+            }
+        }
+
+        /**
+         * 清空当前会话的所有变量 - 支持异步
+         */
+        async clearSessionVariables() {
+            try {
+                await this.saveAllVariablesData({});
+                await this.updateVariablesDisplay();
+                return true;
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 清空变量失败:`, error);
+                return false;
+            }
+        }
+
+        /**
+         * 导出当前会话的变量
+         */
+        async exportSessionVariables() {
+            try {
+                const variables = await this.getSessionVariables();
+                const exportData = {
+                    scope: this.useGlobalScope() ? 'global' : 'local',
+                    exportTime: new Date().toISOString(),
+                    variables: variables
+                };
+
+                const dataStr = JSON.stringify(exportData, null, 2);
+                const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+                
+                const exportFileDefaultName = `variables_${this.useGlobalScope() ? 'global' : 'local'}_${new Date().toISOString().split('T')[0]}.json`;
+                
+                const linkElement = document.createElement('a');
+                linkElement.setAttribute('href', dataUri);
+                linkElement.setAttribute('download', exportFileDefaultName);
+                linkElement.click();
+                
+                console.log(`[${EXTENSION_NAME}] 变量导出完成`);
+                return true;
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 导出变量失败:`, error);
+                return false;
+            }
+        }
+
+        /**
+         * 导入变量
+         */
+        async importVariables(jsonData) {
+            try {
+                const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+                
+                if (!data.variables || !Array.isArray(data.variables)) {
+                    throw new Error('无效的变量数据格式');
+                }
+                let importCount = 0;
+
+                for (const variable of data.variables) {
+                    if (variable.name && variable.value !== undefined) {
+                        await this.addVariable(variable.name, variable.value, variable.description || '');
+                        importCount++;
+                    }
+                }
+                console.log(`[${EXTENSION_NAME}] 导入 ${importCount} 个变量到 ${this.useGlobalScope() ? 'global' : 'local'}`);
+                return importCount;
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 导入变量失败:`, error);
+                throw error;
+            }
+        }
+
+        /**
+         * 更新变量显示UI - 支持异步
+         */
+        async updateVariablesDisplay() {
+            try {
+                const sessionId = this.getCurrentSessionId();
+                const variables = await this.getSessionVariables();
+                
+                // 更新会话ID显示
+                const sessionIdElement = document.getElementById('current-session-id');
+                if (sessionIdElement) {
+                    sessionIdElement.textContent = sessionId || '未获取到会话ID';
+                }
+
+                // 更新变量数量显示
+                const countElement = document.getElementById('variables-count');
+                if (countElement) {
+                    countElement.textContent = variables.length.toString();
+                }
+
+                // 更新变量列表
+                this.renderVariablesList(variables);
+                
+                console.log(`[${EXTENSION_NAME}] 变量显示已更新，会话: ${sessionId}，数量: ${variables.length}`);
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 更新变量显示失败:`, error);
+            }
+        }
+
+        /**
+         * 渲染变量列表
+         */
+        /**
+         * 打开变量编辑器
+         */
+        async openVariablesEditor() {
+            try {
+                const overlay = document.getElementById('variables-editor-overlay');
+                if (!overlay) return;
+
+                // 显示编辑器
+                overlay.style.display = 'flex';
+                setTimeout(() => {
+                    overlay.classList.add('active');
+                }, 10);
+
+                // 渲染变量到编辑器
+                await this.renderVariablesToEditor();
+
+                console.log(`[${EXTENSION_NAME}] 变量编辑器已打开`);
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 打开变量编辑器失败:`, error);
+            }
+        }
+
+        /**
+         * 关闭变量编辑器
+         */
+        closeVariablesEditor() {
+            try {
+                const overlay = document.getElementById('variables-editor-overlay');
+                if (!overlay) return;
+
+                overlay.classList.remove('active');
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                }, 300);
+
+                console.log(`[${EXTENSION_NAME}] 变量编辑器已关闭`);
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 关闭变量编辑器失败:`, error);
+            }
+        }
+
+        /**
+         * 渲染变量到编辑器表格
+         */
+        async renderVariablesToEditor(searchText = '') {
+            const container = document.getElementById('variables-editor-table-container');
+            const countElement = document.getElementById('editor-search-count');
+            if (!container) return;
+
+            const variables = await this.getSessionVariables();
+            let filteredVariables = variables;
+
+            // 应用搜索过滤
+            if (searchText.trim()) {
+                const search = searchText.toLowerCase();
+                filteredVariables = variables.filter(variable => 
+                    variable.name.toLowerCase().includes(search) ||
+                    variable.value.toLowerCase().includes(search) ||
+                    (variable.description && variable.description.toLowerCase().includes(search))
+                );
+            }
+
+            // 更新计数
+            if (countElement) {
+                countElement.textContent = `共 ${filteredVariables.length} 个变量`;
+                if (searchText.trim() && filteredVariables.length !== variables.length) {
+                    countElement.textContent += ` (从 ${variables.length} 个中筛选)`;
+                }
+            }
+
+            if (filteredVariables.length === 0) {
+                container.innerHTML = `
+                    <div class="variables-editor-empty">
+                        <h3>${searchText.trim() ? '未找到匹配的变量' : '暂无变量'}</h3>
+                        <p>${searchText.trim() ? '尝试修改搜索条件' : '添加第一个变量来开始使用'}</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = `
+                <table class="variables-editor-table">
+                    <thead>
+                        <tr>
+                            <th>变量名</th>
+                            <th>变量值</th>
+                            <th>变量作用</th>
+                            <th>创建时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            filteredVariables.forEach(variable => {
+                const createTime = new Date(variable.createdAt).toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                html += `
+                    <tr data-variable-id="${variable.id}">
+                        <td class="variable-name-cell">${this.escapeHtml(variable.name)}</td>
+                        <td class="variable-value-cell">${this.escapeHtml(variable.value)}</td>
+                        <td class="variable-description-cell">${this.escapeHtml(variable.description || '无描述')}</td>
+                        <td class="variable-time-cell">${createTime}</td>
+                        <td class="variable-actions-cell">
+                            <button class="variable-action-btn variable-edit-btn" onclick="variablesManager.editVariableInEditor('${variable.id}')">编辑</button>
+                            <button class="variable-action-btn variable-delete-btn" onclick="variablesManager.deleteVariableWithConfirm('${variable.id}')">删除</button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        /**
+         * 在编辑器中编辑变量 - 支持异步
+         */
+        async editVariableInEditor(variableId) {
+            try {
+                const variables = await this.getSessionVariables();
+                const variable = variables.find(v => v.id === variableId);
+                
+                if (!variable) {
+                    showStatus('变量不存在', true);
+                    return;
+                }
+
+                // 创建编辑弹窗
+                const editHtml = `
+                    <div class="edit-variable-form">
+                        <h4>编辑变量</h4>
+                        <div class="form-group">
+                            <label for="edit-variable-name">变量名:</label>
+                            <input type="text" id="edit-variable-name" class="form-control" value="${this.escapeHtml(variable.name)}">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-variable-value">变量值:</label>
+                            <input type="text" id="edit-variable-value" class="form-control" value="${this.escapeHtml(variable.value)}">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-variable-description">变量作用:</label>
+                            <textarea id="edit-variable-description" class="form-control" rows="3">${this.escapeHtml(variable.description)}</textarea>
+                        </div>
+                    </div>
+                `;
+
+                if (callGenericPopup) {
+                    callGenericPopup(editHtml, POPUP_TYPE.CONFIRM, '', {
+                        okButton: '保存',
+                        cancelButton: '取消'
+                    }).then(async (result) => {
+                        if (result) {
+                            const name = document.getElementById('edit-variable-name')?.value?.trim();
+                            const value = document.getElementById('edit-variable-value')?.value || '';
+                            const description = document.getElementById('edit-variable-description')?.value?.trim() || '';
+
+                            if (!name) {
+                                showStatus('变量名不能为空', true);
+                                return;
+                            }
+
+                            const updated = await this.updateVariable(variableId, name, value, description);
+                            if (updated) {
+                                showStatus('变量已更新');
+                                // 刷新编辑器显示
+                                await this.renderVariablesToEditor();
+                            } else {
+                                showStatus('更新变量失败', true);
+                            }
+                        }
+                    }).catch(() => {
+                        // 用户取消
+                    });
+                } else {
+                    showStatus('编辑变量失败', true);
+                }
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 编辑变量失败:`, error);
+                showStatus('编辑变量失败', true);
+            }
+        }
+
+        /**
+         * 搜索变量
+         */
+        async searchVariables(searchText) {
+            await this.renderVariablesToEditor(searchText);
+        }
+        
+        renderVariablesList(variables) {
+            const container = document.getElementById('variables-list-container');
+            if (!container) return;
+
+            if (variables.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-text">暂无变量</div>
+                        <div class="empty-subtext">添加第一个变量来开始使用</div>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = `
+                <div class="variables-table">
+                    <div class="table-header">
+                        <div class="header-cell name-col">变量名</div>
+                        <div class="header-cell value-col">变量值</div>
+                        <div class="header-cell desc-col">变量作用</div>
+                        <div class="header-cell time-col">创建时间</div>
+                        <div class="header-cell actions-col">操作</div>
+                    </div>
+                    <div class="table-body">
+            `;
+            
+            variables.forEach((variable, index) => {
+                const createTime = new Date(variable.createdAt).toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                html += `
+                    <div class="table-row" data-variable-id="${variable.id}">
+                        <div class="table-cell name-col" data-label="变量名">
+                            <span class="variable-name">${this.escapeHtml(variable.name)}</span>
+                        </div>
+                        <div class="table-cell value-col" data-label="变量值">
+                            <span class="variable-value">${this.escapeHtml(variable.value)}</span>
+                        </div>
+                        <div class="table-cell desc-col" data-label="变量作用">
+                            <span class="variable-description" title="${this.escapeHtml(variable.description || '')}">
+                                ${this.escapeHtml(variable.description || '无描述')}
+                            </span>
+                        </div>
+                        <div class="table-cell time-col" data-label="创建时间">
+                            <span class="create-time">${createTime}</span>
+                        </div>
+                        <div class="table-cell actions-col" data-label="操作">
+                            <div class="action-buttons">
+                                <button class="btn-action btn-edit" onclick="variablesManager.editVariable('${variable.id}')" title="编辑">
+                                    编辑
+                                </button>
+                                <button class="btn-action btn-delete" onclick="variablesManager.deleteVariableWithConfirm('${variable.id}')" title="删除">
+                                    删除
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `
+                    </div>
+                </div>
+            `;
+            container.innerHTML = html;
+        }
+
+        /**
+         * HTML转义函数
+         */
+        escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        /**
+         * 编辑变量（弹窗）
+         */
+        async editVariable(variableId) {
+            try {
+                const variables = await this.getSessionVariables();
+                const variable = variables.find(v => v.id === variableId);
+                
+                if (!variable) {
+                    showStatus('变量不存在', true);
+                    return;
+                }
+
+                // 创建编辑弹窗
+                const editHtml = `
+                    <div class="edit-variable-form">
+                        <h4>编辑变量</h4>
+                        <div class="form-group">
+                            <label for="edit-variable-name">变量名:</label>
+                            <input type="text" id="edit-variable-name" class="form-control" value="${this.escapeHtml(variable.name)}">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-variable-value">变量值:</label>
+                            <input type="text" id="edit-variable-value" class="form-control" value="${this.escapeHtml(variable.value)}">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-variable-description">变量作用:</label>
+                            <textarea id="edit-variable-description" class="form-control" rows="3">${this.escapeHtml(variable.description)}</textarea>
+                        </div>
+                    </div>
+                `;
+
+                if (callGenericPopup) {
+                    callGenericPopup(editHtml, POPUP_TYPE.CONFIRM, '', {
+                        okButton: '保存',
+                        cancelButton: '取消'
+                    }).then(async result => {
+                        if (result) {
+                            const name = document.getElementById('edit-variable-name')?.value?.trim();
+                            const value = document.getElementById('edit-variable-value')?.value || '';
+                            const description = document.getElementById('edit-variable-description')?.value?.trim() || '';
+
+                            if (!name) {
+                                showStatus('变量名不能为空', true);
+                                return;
+                            }
+
+                            const updated = await this.updateVariable(variableId, name, value, description);
+                            if (updated) {
+                                showStatus('变量已更新');
+                            } else {
+                                showStatus('更新变量失败', true);
+                            }
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 编辑变量失败:`, error);
+                showStatus('编辑变量失败', true);
+            }
+        }
+
+        /**
+         * 删除变量（带确认）
+         */
+        async deleteVariableWithConfirm(variableId) {
+            try {
+                const variables = await this.getSessionVariables();
+                const variable = variables.find(v => v.id === variableId);
+                
+                if (!variable) {
+                    showStatus('变量不存在', true);
+                    return;
+                }
+
+                if (callGenericPopup) {
+                    callGenericPopup(
+                        `确定要删除变量 "${variable.name}" 吗？此操作无法撤销。`,
+                        POPUP_TYPE.CONFIRM,
+                        '',
+                        {
+                            okButton: '删除',
+                            cancelButton: '取消'
+                        }
+                    ).then(async result => {
+                        if (result) {
+                            const success = await this.deleteVariable(variableId);
+                            if (success) {
+                                showStatus('变量已删除');
+                            } else {
+                                showStatus('删除变量失败', true);
+                            }
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 删除变量失败:`, error);
+                showStatus('删除变量失败', true);
+            }
+        }
+
+        /**
+         * 更新变量
+         */
+        async updateVariable(variableId, name, value, description = '') {
+            try {
+                const sessionId = this.getCurrentSessionId();
+                const allData = this.getAllVariablesData();
+                
+                if (!allData[sessionId]) {
+                    return false;
+                }
+                
+                const variable = allData[sessionId].find(v => v.id === variableId);
+                if (!variable) {
+                    return false;
+                }
+                
+                variable.name = name;
+                variable.value = value;
+                variable.description = description;
+                variable.updatedAt = new Date().toISOString();
+                
+                const success = this.saveAllVariablesData(allData);
+                
+                if (success) {
+                    console.log(`[${EXTENSION_NAME}] 变量已更新:`, variable);
+                    await this.updateVariablesDisplay();
+                }
+                
+                return success;
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 更新变量失败:`, error);
+                return false;
+            }
+        }
+
+        /**
+         * 清空当前会话的所有变量
+         */
+        async clearSessionVariables() {
+            try {
+                const sessionId = this.getCurrentSessionId();
+                const allData = this.getAllVariablesData();
+                
+                allData[sessionId] = [];
+                const success = this.saveAllVariablesData(allData);
+                
+                if (success) {
+                    console.log(`[${EXTENSION_NAME}] 会话变量已清空:`, sessionId);
+                    await this.updateVariablesDisplay();
+                }
+                
+                return success;
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 清空变量失败:`, error);
+                return false;
+            }
+        }
+
+        /**
+         * 导出当前会话的变量
+         */
+        exportSessionVariables() {
+            try {
+                const sessionId = this.getCurrentSessionId();
+                const variables = this.getSessionVariables();
+                
+                const exportData = {
+                    sessionId: sessionId,
+                    exportTime: new Date().toISOString(),
+                    variables: variables
+                };
+                
+                const dataStr = JSON.stringify(exportData, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `variables_${sessionId}_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                console.log(`[${EXTENSION_NAME}] 变量导出完成`);
+                return true;
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 导出变量失败:`, error);
+                return false;
+            }
+        }
+
+        /**
+         * 导入变量
+         */
+        async importVariables(jsonData) {
+            try {
+                const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+                
+                if (!data.variables || !Array.isArray(data.variables)) {
+                    throw new Error('无效的变量数据格式');
+                }
+                
+                const sessionId = this.getCurrentSessionId();
+                const allData = this.getAllVariablesData();
+                
+                if (!allData[sessionId]) {
+                    allData[sessionId] = [];
+                }
+                
+                let importCount = 0;
+
+                for (const variable of data.variables) {
+                    if (variable.name && variable.value !== undefined) {
+                        await this.addVariable(variable.name, variable.value, variable.description || '');
+                        importCount++;
+                    }
+                }
+
+                console.log(`[${EXTENSION_NAME}] 导入 ${importCount} 个变量到会话 ${sessionId}`);
+                return importCount;
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 导入变量失败:`, error);
+                return 0;
+            }
+        }
+
+        /**
+         * 更新变量显示
+         */
+        async updateVariablesDisplay() {
+            try {
+                const sessionId = this.getCurrentSessionId();
+                const variables = this.getSessionVariables();
+
+                // 更新会话ID显示
+                const sessionIdElement = document.getElementById('current-session-id');
+                if (sessionIdElement) {
+                    sessionIdElement.textContent = sessionId || '未获取到会话ID';
+                }
+
+                // 更新变量数量显示
+                const countElement = document.getElementById('variables-count');
+                if (countElement) {
+                    countElement.textContent = variables.length.toString();
+                }
+
+                // 更新变量列表
+                this.renderVariablesList(variables);
+                
+                console.log(`[${EXTENSION_NAME}] 变量显示已更新，会话: ${sessionId}，数量: ${variables.length}`);
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 更新变量显示失败:`, error);
+            }
+        }
+
+        /**
+         * 打开变量编辑器
+         */
+        async openVariablesEditor() {
+            try {
+                const overlay = document.getElementById('variables-editor-overlay');
+                if (!overlay) return;
+
+                // 显示编辑器
+                overlay.style.display = 'flex';
+                setTimeout(() => {
+                    overlay.classList.add('active');
+                }, 10);
+
+                // 渲染变量到编辑器
+                await this.renderVariablesToEditor();
+
+                console.log(`[${EXTENSION_NAME}] 变量编辑器已打开`);
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 打开变量编辑器失败:`, error);
+            }
+        }
+
+        /**
+         * 渲染变量到编辑器
+         */
+        async renderVariablesToEditor(searchText = '') {
+            const container = document.getElementById('variables-editor-table-container');
+            const countElement = document.getElementById('editor-search-count');
+            if (!container) return;
+
+            const variables = this.getSessionVariables();
+            let filteredVariables = variables;
+
+            // 应用搜索过滤
+            if (searchText.trim()) {
+                const search = searchText.toLowerCase();
+                filteredVariables = variables.filter(variable => 
+                    variable.name.toLowerCase().includes(search) ||
+                    variable.value.toLowerCase().includes(search) ||
+                    (variable.description && variable.description.toLowerCase().includes(search))
+                );
+            }
+
+            // 更新计数
+            if (countElement) {
+                countElement.textContent = `共 ${filteredVariables.length} 个变量`;
+                if (searchText.trim() && filteredVariables.length !== variables.length) {
+                    countElement.textContent += ` (从 ${variables.length} 个中筛选)`;
+                }
+            }
+
+            // 渲染变量表格
+            if (filteredVariables.length === 0) {
+                container.innerHTML = `
+                    <div class="variables-editor-empty">
+                        <h3>暂无变量</h3>
+                        <p>${searchText.trim() ? '没有匹配的变量' : '当前会话还没有创建任何变量'}</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = `
+                <table class="variables-editor-table">
+                    <thead>
+                        <tr>
+                            <th>变量名</th>
+                            <th>变量值</th>
+                            <th>变量作用</th>
+                            <th>创建时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            filteredVariables.forEach(variable => {
+                const createTime = new Date(variable.createdAt).toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                html += `
+                    <tr data-variable-id="${variable.id}">
+                        <td class="variable-name-cell">${this.escapeHtml(variable.name)}</td>
+                        <td class="variable-value-cell">${this.escapeHtml(variable.value)}</td>
+                        <td class="variable-description-cell">${this.escapeHtml(variable.description || '无描述')}</td>
+                        <td class="variable-time-cell">${createTime}</td>
+                        <td class="variable-actions-cell">
+                            <button class="variable-action-btn variable-edit-btn" onclick="variablesManager.editVariable('${variable.id}')">编辑</button>
+                            <button class="variable-action-btn variable-delete-btn" onclick="variablesManager.deleteVariableWithConfirm('${variable.id}')">删除</button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        /**
+         * 搜索变量
+         */
+        async searchVariables(searchText) {
+            await this.renderVariablesToEditor(searchText);
+        }
+        
+        /**
+         * 渲染变量列表
+         */
+        renderVariablesList(variables) {
+            const container = document.getElementById('variables-list-container');
+            if (!container) return;
+
+            if (variables.length === 0) {
+                container.innerHTML = '<p class="text-muted">当前会话暂无变量</p>';
+                return;
+            }
+
+            let html = '<div class="variables-list">';
+            variables.forEach(variable => {
+                html += `
+                    <div class="variable-item" data-variable-id="${variable.id}">
+                        <div class="variable-name">${this.escapeHtml(variable.name)}</div>
+                        <div class="variable-value">${this.escapeHtml(variable.value)}</div>
+                        ${variable.description ? `<div class="variable-description">${this.escapeHtml(variable.description)}</div>` : ''}
+                    </div>
+                `;
+            });
+            html += '</div>';
+
+            container.innerHTML = html;
+        }
+
+        /**
+         * 编辑变量（弹窗）
+         */
+        async editVariable(variableId) {
+            try {
+                const variables = this.getSessionVariables();
+                const variable = variables.find(v => v.id === variableId);
+                
+                if (!variable) {
+                    showStatus('变量不存在', true);
+                    return;
+                }
+
+                // 创建编辑弹窗
+                const editHtml = `
+                    <div class="form-group">
+                        <label for="edit-variable-name">变量名称:</label>
+                        <input type="text" id="edit-variable-name" class="form-control" value="${this.escapeHtml(variable.name)}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-variable-value">变量值:</label>
+                        <textarea id="edit-variable-value" class="form-control" rows="3">${this.escapeHtml(variable.value)}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-variable-description">变量作用:</label>
+                        <input type="text" id="edit-variable-description" class="form-control" value="${this.escapeHtml(variable.description || '')}" placeholder="可选，描述这个变量的作用">
+                    </div>
+                `;
+
+                if (callGenericPopup) {
+                    callGenericPopup(editHtml, POPUP_TYPE.CONFIRM, '', {
+                        okButton: '保存',
+                        cancelButton: '取消'
+                    }).then(async result => {
+                        if (result) {
+                            const name = document.getElementById('edit-variable-name')?.value?.trim();
+                            const value = document.getElementById('edit-variable-value')?.value || '';
+                            const description = document.getElementById('edit-variable-description')?.value?.trim() || '';
+
+                            if (!name) {
+                                showStatus('变量名不能为空', true);
+                                return;
+                            }
+
+                            const updated = await this.updateVariable(variableId, name, value, description);
+                            if (updated) {
+                                showStatus('变量已更新');
+                            } else {
+                                showStatus('更新变量失败', true);
+                            }
+                        }
+                    });
+                } else {
+                    console.warn(`[${EXTENSION_NAME}] callGenericPopup 不可用`);
+                    showStatus('编辑变量失败', true);
+                }
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 编辑变量失败:`, error);
+                showStatus('编辑变量失败', true);
+            }
+        }
+
+        /**
+         * 删除变量（带确认）
+         */
+        async deleteVariableWithConfirm(variableId) {
+            try {
+                const variables = this.getSessionVariables();
+                const variable = variables.find(v => v.id === variableId);
+                
+                if (!variable) {
+                    showStatus('变量不存在', true);
+                    return;
+                }
+
+                if (callGenericPopup) {
+                    callGenericPopup(
+                        `确定要删除变量 "${variable.name}" 吗？\n\n这个操作无法撤销。`,
+                        POPUP_TYPE.CONFIRM,
+                        '确认删除',
+                        { okButton: '删除', cancelButton: '取消' }
+                    ).then(async result => {
+                        if (result) {
+                            const success = await this.deleteVariable(variableId);
+                            if (success) {
+                                showStatus('变量已删除');
+                            } else {
+                                showStatus('删除变量失败', true);
+                            }
+                        }
+                    });
+                } else {
+                    console.warn(`[${EXTENSION_NAME}] callGenericPopup 不可用`);
+                    showStatus('删除变量失败', true);
+                }
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 删除变量失败:`, error);
+                showStatus('删除变量失败', true);
+            }
+        }
+
+        /**
+         * 生成变量ID
+         */
+        generateVariableId() {
+            if (typeof uuidv4 === 'function') {
+                return uuidv4();
+            }
+            // 备用方案：生成随机ID
+            return 'var_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+        }
+
+        /**
+         * HTML转义
+         */
+        escapeHtml(text) {
+            if (typeof text !== 'string') return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    }
+
+    // 创建对话历史管理实例
     const conversationHistory = new ConversationHistoryManager();
+
+    // 创建变量管理实例
+    const variablesManager = new VariablesManager();
+
+    // 将变量管理器暴露到全局作用域，以便HTML onclick可以访问
+    window.variablesManager = variablesManager;
+
+    // 存储系统初始化改为在模块导入完成后执行（见 initializeExtension）
 
     /**
      * 异步导入SillyTavern的模块
@@ -293,9 +1436,12 @@
             const extensionsModule = await import('/scripts/extensions.js');
             getContext = extensionsModule.getContext;
             writeExtensionField = extensionsModule.writeExtensionField;
+            extension_settings = extensionsModule.extension_settings; // 导入设置对象
+            saveMetadataDebounced = extensionsModule.saveMetadataDebounced; // 元数据保存（本地变量）
             console.log(`[${EXTENSION_NAME}] 扩展模块导入成功:`, {
                 getContext: typeof getContext,
-                writeExtensionField: typeof writeExtensionField
+                writeExtensionField: typeof writeExtensionField,
+                extension_settings: typeof extension_settings
             });
 
             // 导入主脚本模块
@@ -305,6 +1451,8 @@
             this_chid = scriptModule.this_chid;
             reloadCurrentChat = scriptModule.reloadCurrentChat;
             getCurrentChatId = scriptModule.getCurrentChatId;
+            saveSettingsDebounced = scriptModule.saveSettingsDebounced; // 导入设置保存函数
+            chat_metadata = scriptModule.chat_metadata; // 导入聊天元数据（本地变量底层存储）
             eventSource = scriptModule.eventSource; // 导入事件源
             event_types = scriptModule.event_types; // 导入事件类型
             console.log(`[${EXTENSION_NAME}] 主脚本模块导入成功:`, {
@@ -312,6 +1460,7 @@
                 this_chid: typeof this_chid,
                 reloadCurrentChat: typeof reloadCurrentChat,
                 getCurrentChatId: typeof getCurrentChatId,
+                saveSettingsDebounced: typeof saveSettingsDebounced,
                 eventSource: typeof eventSource,
                 event_types: typeof event_types
             });
@@ -357,15 +1506,42 @@
      * 加载扩展设置
      */
     function loadSettings() {
-        // 确保全局扩展设置对象存在
-        if (!window.extension_settings) {
-            window.extension_settings = {};
-            console.log(`[${EXTENSION_NAME}] 初始化 window.extension_settings 对象`);
+        // 使用导入的extension_settings对象
+        if (!extension_settings) {
+            console.error(`[${EXTENSION_NAME}] extension_settings 未导入`);
+            return;
         }
 
-        if (window.extension_settings && window.extension_settings[EXTENSION_NAME]) {
-            Object.assign(extensionSettings, window.extension_settings[EXTENSION_NAME]);
+        // 初始化扩展设置（如果不存在）
+        if (!extension_settings[EXTENSION_NAME]) {
+            extension_settings[EXTENSION_NAME] = {
+                // 原有设置
+                enabled: true,
+                showPreview: true,
+                autoValidate: true,
+                rememberLastValues: true,
+                lastRegexPattern: '',
+                lastReplacement: '',
+                lastFlags: 'g',
+                // AI功能设置
+                aiEnabled: true,
+                aiProvider: 'gemini',
+                geminiApiKey: '',
+                customApiUrl: '',
+                customApiKey: '',
+                defaultModel: 'gemini-2.5-pro',
+                customModel: '',
+                // 对话历史设置
+                enableConversationHistory: true,
+                maxHistorySize: 50,
+                // 变量管理设置
+                variables: {} // 变量数据存储
+            };
+            console.log(`[${EXTENSION_NAME}] 初始化 extension_settings[${EXTENSION_NAME}] 对象`);
         }
+
+        // 更新本地设置缓存
+        Object.assign(extensionSettings, extension_settings[EXTENSION_NAME]);
 
         // 尝试从浏览器存储加载API配置
         const hasBrowserConfig = loadAPIConfigFromBrowser();
@@ -380,12 +1556,15 @@
      * 保存扩展设置
      */
     function saveSettings() {
-        if (!window.extension_settings) {
-            window.extension_settings = {};
+        if (!extension_settings) {
+            console.error(`[${EXTENSION_NAME}] extension_settings 未导入`);
+            return;
         }
 
-        window.extension_settings[EXTENSION_NAME] = extensionSettings;
+        // 更新扩展设置
+        Object.assign(extension_settings[EXTENSION_NAME], extensionSettings);
 
+        // 使用SillyTavern的设置保存机制
         if (typeof saveSettingsDebounced === 'function') {
             saveSettingsDebounced();
         }
@@ -837,6 +2016,9 @@
                         <button id="tab-ai" class="tab-button" data-page="ai"${isMobile ? ' data-mobile="true"' : ''}>
                             AI生成
                         </button>
+                        <button id="tab-variables" class="tab-button" data-page="variables"${isMobile ? ' data-mobile="true"' : ''}>
+                            变量页面
+                        </button>
                     </div>
                 </div>
 
@@ -1044,8 +2226,96 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
                     </div>
                 </div>
 
+                <!-- 第三个页面：变量页面 -->
+                <div id="page-variables" class="page-content" style="display: none;">
+                    <div class="variables-simple-container">
+                        <!-- 会话信息显示 -->
+                        <div class="form-group">
+                            <div class="session-info-display">
+                                <div class="session-item">
+                                    <span class="session-label">当前会话ID:</span>
+                                    <span class="session-value" id="current-session-id">未获取到会话ID</span>
+                                </div>
+                                <div class="session-item">
+                                    <span class="session-label">变量数量:</span>
+                                    <span class="session-value" id="variables-count">0</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 添加新变量区域 -->
+                        <div class="add-variable-section">
+                            <h4>添加新变量</h4>
+                            <div class="form-row">
+                                <div class="form-col">
+                                    <label for="variable-name">变量名:</label>
+                                    <input type="text" id="variable-name" class="form-control" 
+                                           placeholder="例如: 角色状态">
+                                </div>
+                                <div class="form-col">
+                                    <label for="variable-value">变量值:</label>
+                                    <input type="text" id="variable-value" class="form-control" 
+                                           placeholder="例如: 健康">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="variable-description">变量作用:</label>
+                                <textarea id="variable-description" class="form-control" rows="2" 
+                                          placeholder="描述此变量的用途和作用..."></textarea>
+                            </div>
+                            <div class="form-group">
+                                <button id="add-variable-btn" class="ai-generate-btn">
+                                    添加变量
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 变量管理区域 -->
+                        <div class="variables-management-section">
+                            <h4>变量管理</h4>
+                            <div class="management-controls">
+                                <button id="view-variables-btn" class="ai-apply-btn">
+                                    查看变量
+                                </button>
+                                <div class="batch-controls">
+                                    <button id="export-variables-btn" class="ai-preview-btn">
+                                        导出变量
+                                    </button>
+                                    <button id="import-variables-btn" class="ai-preview-btn">
+                                        导入变量
+                                    </button>
+                                    <input type="file" id="import-file-input" accept=".json" style="display: none;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="quick-regex-footer">
                     <div class="status-message" id="status-message"></div>
+                </div>
+            </div>
+            
+            <!-- 变量编辑器全屏覆盖层 -->
+            <div id="variables-editor-overlay" class="variables-editor-overlay">
+                <div class="variables-editor-container">
+                    <div class="variables-editor-header">
+                        <h3 class="variables-editor-title">变量编辑器</h3>
+                        <div class="variables-editor-controls">
+                            <button id="editor-refresh-btn" class="editor-control-btn">刷新</button>
+                            <button id="editor-clear-all-btn" class="editor-control-btn">清空所有</button>
+                            <button id="editor-close-btn" class="editor-control-btn editor-close-btn">关闭</button>
+                        </div>
+                    </div>
+                    <div class="variables-editor-content">
+                        <div class="variables-editor-search">
+                            <input type="text" id="variables-search-input" class="variables-search-input" placeholder="搜索变量名或值...">
+                            <span class="search-count" id="editor-search-count">共 0 个变量</span>
+                        </div>
+                        <div id="variables-editor-table-container">
+                            <!-- 变量表格将动态插入此处 -->
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
@@ -3321,6 +4591,13 @@ ${bodyMatch[1]}
             saveAISettings();
         }
 
+        // 更新变量显示（如果切换到变量页面）
+        if (pageId === 'variables') {
+            setTimeout(async () => {
+                await variablesManager.updateVariablesDisplay();
+            }, 100);
+        }
+
         if (isMobile) {
             console.log(`[${EXTENSION_NAME}] 移动端页面切换完成: ${pageId}`);
         }
@@ -3918,6 +5195,11 @@ ${bodyMatch[1]}
             setTimeout(() => {
                 restoreLatestAIResult();
             }, 300);
+
+            // 更新变量页面显示（如果当前在变量页面）
+            setTimeout(async () => {
+                await variablesManager.updateVariablesDisplay();
+            }, 400);
         } else {
             console.log(`[${EXTENSION_NAME}] 工具容器不存在或扩展未启用`);
         }
@@ -3961,6 +5243,9 @@ ${bodyMatch[1]}
         
         // AI相关事件
         bindAIEvents();
+        
+        // 变量页面相关事件
+        bindVariablesEvents();
         
         console.log(`[${EXTENSION_NAME}] 事件绑定完成`);
     }
@@ -4303,6 +5588,225 @@ ${bodyMatch[1]}
     }
     
     /**
+     * 绑定变量页面相关事件
+     */
+    function bindVariablesEvents() {
+        // 添加变量按钮
+        $(document).off('click', '#add-variable-btn').on('click', '#add-variable-btn', function() {
+            handleAddVariable();
+        });
+        
+        // 查看变量按钮
+        $(document).off('click', '#view-variables-btn').on('click', '#view-variables-btn', async function() {
+            await variablesManager.openVariablesEditor();
+        });
+        
+        // 导出变量按钮
+        $(document).off('click', '#export-variables-btn').on('click', '#export-variables-btn', async function() {
+            await handleExportVariables();
+        });
+        
+        // 导入变量按钮
+        $(document).off('click', '#import-variables-btn').on('click', '#import-variables-btn', function() {
+            document.getElementById('import-file-input').click();
+        });
+        
+        // 文件选择事件
+        $(document).off('change', '#import-file-input').on('change', '#import-file-input', function(event) {
+            handleImportVariables(event);
+        });
+        
+        // 编辑器关闭按钮
+        $(document).off('click', '#editor-close-btn').on('click', '#editor-close-btn', function() {
+            variablesManager.closeVariablesEditor();
+        });
+        
+        // 编辑器刷新按钮
+        $(document).off('click', '#editor-refresh-btn').on('click', '#editor-refresh-btn', function() {
+            variablesManager.renderVariablesToEditor();
+            showStatus('变量列表已刷新');
+        });
+        
+        // 编辑器清空所有按钮
+        $(document).off('click', '#editor-clear-all-btn').on('click', '#editor-clear-all-btn', async function() {
+            await handleClearAllVariables();
+        });
+        
+        // 编辑器搜索输入
+        $(document).off('input', '#variables-search-input').on('input', '#variables-search-input', async function() {
+            const searchText = this.value;
+            await variablesManager.searchVariables(searchText);
+        });
+        
+        // 点击编辑器覆盖层关闭编辑器（点击背景关闭）
+        $(document).off('click', '#variables-editor-overlay').on('click', '#variables-editor-overlay', function(event) {
+            if (event.target === this) {
+                variablesManager.closeVariablesEditor();
+            }
+        });
+        
+        // 页面切换到变量页面时更新显示
+        $(document).off('click', '#tab-variables').on('click', '#tab-variables', function() {
+            setTimeout(async () => {
+                await variablesManager.updateVariablesDisplay();
+            }, 100);
+        });
+    }
+
+    /**
+     * 处理添加变量 - 支持异步
+     */
+    async function handleAddVariable() {
+        try {
+            const name = document.getElementById('variable-name')?.value?.trim();
+            const value = document.getElementById('variable-value')?.value || '';
+            const description = document.getElementById('variable-description')?.value?.trim() || '';
+
+            if (!name) {
+                showStatus('变量名不能为空', true);
+                return;
+            }
+
+            const variable = await variablesManager.addVariable(name, value, description);
+            if (variable) {
+                // 清空表单
+                document.getElementById('variable-name').value = '';
+                document.getElementById('variable-value').value = '';
+                document.getElementById('variable-description').value = '';
+                
+                showStatus(`变量 "${name}" 已添加`);
+                
+                if (toastr) {
+                    toastr.success(`变量 "${name}" 已添加`, '成功');
+                }
+            } else {
+                showStatus('添加变量失败', true);
+            }
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 添加变量失败:`, error);
+            showStatus('添加变量失败', true);
+        }
+    }
+
+    /**
+     * 处理清空所有变量
+     */
+    async function handleClearAllVariables() {
+        try {
+            const variables = await variablesManager.getSessionVariables();
+            
+            if (variables.length === 0) {
+                showStatus('📝 当前会话暂无变量');
+                return;
+            }
+
+            if (callGenericPopup) {
+                callGenericPopup(
+                    `确定要清空当前会话的所有 ${variables.length} 个变量吗？此操作无法撤销。`,
+                    POPUP_TYPE.CONFIRM,
+                    '',
+                    {
+                        okButton: '清空',
+                        cancelButton: '取消'
+                    }
+                ).then(async result => {
+                    if (result) {
+                        const success = await variablesManager.clearSessionVariables();
+                        if (success) {
+                            showStatus('所有变量已清空');
+                            if (toastr) {
+                                toastr.success('所有变量已清空', '成功');
+                            }
+                        } else {
+                            showStatus('清空变量失败', true);
+                        }
+                    }
+                });
+            }
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 清空变量失败:`, error);
+            showStatus('清空变量失败', true);
+        }
+    }
+
+    /**
+     * 处理导出变量
+     */
+    async function handleExportVariables() {
+        try {
+            const variables = await variablesManager.getSessionVariables();
+            
+            if (variables.length === 0) {
+                showStatus('当前会话暂无变量可导出');
+                return;
+            }
+
+            const success = variablesManager.exportSessionVariables();
+            if (success) {
+                showStatus(`已导出 ${variables.length} 个变量`);
+                if (toastr) {
+                    toastr.success(`已导出 ${variables.length} 个变量`, '导出成功');
+                }
+            } else {
+                showStatus('导出变量失败', true);
+            }
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 导出变量失败:`, error);
+            showStatus('导出变量失败', true);
+        }
+    }
+
+    /**
+     * 处理导入变量
+     */
+    function handleImportVariables(event) {
+        try {
+            const file = event.target.files[0];
+            if (!file) {
+                return;
+            }
+
+            if (file.type !== 'application/json' && !file.name.endsWith('.json')) {
+                showStatus('请选择 JSON 格式的文件', true);
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const jsonData = e.target.result;
+                    const importCount = await variablesManager.importVariables(jsonData);
+                    
+                    if (importCount > 0) {
+                        showStatus(`成功导入 ${importCount} 个变量`);
+                        if (toastr) {
+                            toastr.success(`成功导入 ${importCount} 个变量`, '导入成功');
+                        }
+                    } else {
+                        showStatus('⚠️ 没有导入任何变量', false);
+                    }
+                } catch (error) {
+                    console.error(`[${EXTENSION_NAME}] 解析导入文件失败:`, error);
+                    showStatus('导入文件格式错误', true);
+                }
+            };
+            
+            reader.onerror = function() {
+                showStatus('读取文件失败', true);
+            };
+            
+            reader.readAsText(file);
+            
+            // 清空文件选择器
+            event.target.value = '';
+            
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 导入变量失败:`, error);
+            showStatus('导入变量失败', true);
+        }
+    }
+    
+    /**
      * 切换API提供商
      */
     function switchAPIProvider(provider) {
@@ -4608,6 +6112,14 @@ ${bodyMatch[1]}
                 throw new Error('无法导入必要的SillyTavern模块');
             }
 
+            // 初始化变量存储（与核心宏一致）
+            try {
+                variablesManager.initializeStorage();
+                console.log(`[${EXTENSION_NAME}] 变量管理器初始化完成`);
+            } catch (error) {
+                console.warn(`[${EXTENSION_NAME}] 变量管理器初始化失败:`, error);
+            }
+
             // 加载设置
             loadSettings();
 
@@ -4694,3 +6206,10 @@ ${bodyMatch[1]}
     console.log(`[${EXTENSION_NAME}] 扩展脚本已加载`);
 
 })();
+            // 导入变量操作（与项目宏一致）
+            console.log(`[${EXTENSION_NAME}] 导入变量模块: /scripts/variables.js`);
+            const variablesModule = await import('/scripts/variables.js');
+            getLocalVariable = variablesModule.getLocalVariable;
+            setLocalVariable = variablesModule.setLocalVariable;
+            getGlobalVariable = variablesModule.getGlobalVariable;
+            setGlobalVariable = variablesModule.setGlobalVariable;
