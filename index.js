@@ -3690,14 +3690,18 @@ ${bodyMatch[1]}
             drawer.classList.remove('closed');
             content.style.display = 'block';
             if (icon) {
-                icon.style.transform = 'rotate(0deg)';
+                // 切换到向上箭头
+                icon.classList.remove('fa-circle-chevron-down');
+                icon.classList.add('fa-circle-chevron-up');
             }
         } else {
             // 收起
             drawer.classList.add('closed');
             content.style.display = 'none';
             if (icon) {
-                icon.style.transform = 'rotate(-90deg)';
+                // 切换到向下箭头
+                icon.classList.remove('fa-circle-chevron-up');
+                icon.classList.add('fa-circle-chevron-down');
             }
         }
     }
@@ -3714,12 +3718,12 @@ ${bodyMatch[1]}
         // 创建设置面板HTML
         const settingsHtml = `
             <div id="${EXTENSION_NAME}-settings">
-                <div class="inline-drawer">
+                <div class="inline-drawer closed">
                     <div class="inline-drawer-header" onclick="toggleDrawer(this)">
-                        <h3>ST快速状态栏 - 正则表达式工具</h3>
+                        <b>ST快速状态栏 - 正则表达式工具</b>
                         <div class="fa-solid fa-circle-chevron-down inline-drawer-icon"></div>
                     </div>
-                    <div class="inline-drawer-content" style="display: block;">
+                    <div class="inline-drawer-content" style="display: none;">
                         <!-- 快速正则工具区域 -->
                         <div id="quick-regex-tools-container"></div>
                         

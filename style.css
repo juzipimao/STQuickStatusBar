@@ -2,21 +2,16 @@
 
 /* === 扩展设置面板样式 === */
 #STQuickStatusBar-settings {
-    margin: 10px 0;
+    /* 移除多余的边距，与其他插件保持一致 */
+    margin: 0;
     padding: 0;
     border: none;
     border-radius: 0;
     background: transparent;
 }
 
-#STQuickStatusBar-settings h3 {
-    margin: 0;
-    color: var(--SmartThemeEmColor);
-    font-size: 15px;
-    text-align: center;
-    font-weight: 500;
-    padding: 0;
-}
+/* 展开状态不需要特殊处理 */
+
 
 
 #STQuickStatusBar-settings .checkbox_label {
@@ -495,26 +490,38 @@ input[type="password"].form-control:focus {
 
 /* === 扩展设置抽屉样式 === */
 #STQuickStatusBar-settings .inline-drawer {
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 3px;
-    margin: 5px 0;
+    /* 移除白色边框和其他不必要的样式 */
+    border: none;
+    border-radius: 0;
+    margin: 0;
+    background: transparent;
 }
 
 #STQuickStatusBar-settings .inline-drawer-header {
-    background: transparent;
-    padding: 5px 0;
+    /* 与其他插件保持一致的样式 */
+    background-image: linear-gradient(348deg, var(--white30a)2%, var(--grey30a)10%, var(--black70a)95%, var(--SmartThemeQuoteColor)100%);
+    padding: 5px;
     cursor: pointer;
     display: flex;
     justify-content: space-between;
     align-items: center;
     user-select: none;
     transition: all var(--animation-duration-2x);
-    border: none;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
     position: relative;
+    color: var(--SmartThemeBodyTextColor);
+    margin-bottom: 0;
 }
 
 #STQuickStatusBar-settings .inline-drawer-header:hover {
     filter: brightness(150%);
+}
+
+#STQuickStatusBar-settings .inline-drawer-header b {
+    /* 统一标题文字样式，使用默认颜色 */
+    font-weight: bold;
+    font-size: calc(var(--mainFontSize) * 1.0);
 }
 
 #STQuickStatusBar-settings .inline-drawer-header:hover .inline-drawer-icon {
@@ -522,26 +529,40 @@ input[type="password"].form-control:focus {
 }
 
 #STQuickStatusBar-settings .inline-drawer-content {
+    /* 与其他插件保持一致的内容区样式 */
     padding: 12px;
-    border-top: 1px solid var(--SmartThemeBorderColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
+    background-color: var(--black30a);
     display: block;
 }
 
 #STQuickStatusBar-settings .inline-drawer-icon {
-    display: block;
+    /* 统一箭头图标样式 */
+    display: inline-block;
     cursor: pointer;
-    font-size: calc(var(--mainFontSize, 14px) * 1.5);
+    font-size: calc(var(--mainFontSize) * 1.5);
     background-size: cover;
     background-repeat: no-repeat;
     filter: brightness(75%);
     transition: transform 0.2s ease, filter 0.2s ease;
-    transform: rotate(0deg);
+    /* 移除transform，保持原始方向 */
 }
 
 #STQuickStatusBar-settings .inline-drawer.closed .inline-drawer-icon {
-    transform: rotate(-90deg);
+    /* 收缩状态保持原样 */
 }
 
+#STQuickStatusBar-settings {
+    /* 移除多余的边距，与其他插件保持一致 */
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+}
+
+/* 展开状态不需要特殊处理 */
 
 #STQuickStatusBar-settings .inline-drawer.closed .inline-drawer-content {
     display: none;
