@@ -1627,6 +1627,24 @@
             toastr = window.toastr;
             console.log(`[${EXTENSION_NAME}] toastr 可用性:`, typeof toastr);
 
+            // 导入变量操作（与项目宏一致）
+            try {
+                console.log(`[${EXTENSION_NAME}] 导入变量模块: /scripts/variables.js`);
+                const variablesModule = await import('/scripts/variables.js');
+                getLocalVariable = variablesModule.getLocalVariable;
+                setLocalVariable = variablesModule.setLocalVariable;
+                getGlobalVariable = variablesModule.getGlobalVariable;
+                setGlobalVariable = variablesModule.setGlobalVariable;
+                console.log(`[${EXTENSION_NAME}] 变量模块导入成功:`, {
+                    getLocalVariable: typeof getLocalVariable,
+                    setLocalVariable: typeof setLocalVariable,
+                    getGlobalVariable: typeof getGlobalVariable,
+                    setGlobalVariable: typeof setGlobalVariable,
+                });
+            } catch (error) {
+                console.warn(`[${EXTENSION_NAME}] 变量模块导入失败，将在使用时回退检查:`, error);
+            }
+
             // 导入正则扩展模块（用于刷新功能）
             console.log(`[${EXTENSION_NAME}] 导入正则扩展模块: /scripts/extensions/regex/index.js`);
             try {
@@ -6374,13 +6392,7 @@ ${bodyMatch[1]}
     // 当页面卸载时清理资源
     window.addEventListener('beforeunload', cleanup);
 
-    console.log(`[${EXTENSION_NAME}] 扩展脚本已加载`);
+	console.log(`[${EXTENSION_NAME}] 扩展脚本已加载`);
 
 })();
-            // 导入变量操作（与项目宏一致）
-            console.log(`[${EXTENSION_NAME}] 导入变量模块: /scripts/variables.js`);
-            const variablesModule = await import('/scripts/variables.js');
-            getLocalVariable = variablesModule.getLocalVariable;
-            setLocalVariable = variablesModule.setLocalVariable;
-            getGlobalVariable = variablesModule.getGlobalVariable;
-            setGlobalVariable = variablesModule.setGlobalVariable;
+            
