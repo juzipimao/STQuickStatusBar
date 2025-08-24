@@ -1470,6 +1470,121 @@ select.form-control option {
     display: block;
 }
 
+/* === 对话历史弹窗样式 === */
+.conversation-history-display {
+    padding: 8px 2px;
+}
+
+.conversation-history-display h4 {
+    margin: 0 0 12px;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--SmartThemeEmColor);
+}
+
+.conversation-history-display .history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 65vh;
+    overflow: auto;
+    padding-right: 6px;
+}
+
+.history-item {
+    background: var(--SmartThemeBlurTintColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
+    padding: 12px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.history-item:hover {
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.history-header .left-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.history-index {
+    background: transparent;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-weight: 600;
+}
+
+.history-time {
+    color: var(--SmartThemeQuoteColor);
+    font-size: 12px;
+}
+
+.history-header .right-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.history-content {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: 12px;
+}
+
+.user-prompt strong,
+.ai-response strong {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--SmartThemeEmColor);
+}
+
+.prompt-text,
+.response-text-short,
+.response-text-full {
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: transparent; /* 避免白色背景影响可读性 */
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    padding: 10px;
+    line-height: 1.5;
+    font-size: 13px;
+}
+
+.response-box {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.history-toggle-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
+.history-delete-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
+@media (max-width: 900px) {
+    .history-content {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* === 内联预览样式 === */
 .inline-preview-container {
     background: #1a1a1a;

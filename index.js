@@ -222,6 +222,28 @@
         }
 
         /**
+         * 根据ID删除一条历史记录
+         * @param {number|string} id 历史记录ID
+         * @returns {boolean} 是否删除成功
+         */
+        removeEntryById(id) {
+            try {
+                const targetId = Number(id);
+                const history = this.getHistory();
+                const newHistory = history.filter(entry => Number(entry.id) !== targetId);
+                const removed = newHistory.length !== history.length;
+                if (removed) {
+                    localStorage.setItem(this.storageKey, JSON.stringify(newHistory));
+                    this.updateHistoryDisplay();
+                }
+                return removed;
+            } catch (error) {
+                console.error(`[${EXTENSION_NAME}] 删除历史记录失败:`, error);
+                return false;
+            }
+        }
+
+        /**
          * 更新历史记录显示（UI更新）
          */
         updateHistoryDisplay() {
@@ -3446,17 +3468,24 @@ ${bodyMatch[1]}
             // 构建历史对话显示内容
             let historyHtml = `
                 <div class="conversation-history-display">
-                    <h4>💬 对话历史 (共${history.length}条)</h4>
+                    <h4>💬 对话历史 (共<span class="history-total-count">${history.length}</span>条)</h4>
                     <div class="history-list">
             `;
 
             history.forEach((entry, index) => {
                 const date = new Date(entry.timestamp).toLocaleString('zh-CN');
+                const isTruncated = (entry.aiResponse || '').length > 200;
+                const shortText = (entry.aiResponse || '').substring(0, 200);
                 historyHtml += `
-                    <div class="history-item">
+                    <div class="history-item" data-id="${entry.id}">
                         <div class="history-header">
-                            <span class="history-index">#${index + 1}</span>
-                            <span class="history-time">${date}</span>
+                            <div class="left-meta">
+                                <span class="history-index">#${index + 1}</span>
+                                <span class="history-time">${date}</span>
+                            </div>
+                            <div class="right-actions">
+                                <button class="ai-clear-btn history-delete-btn" data-id="${entry.id}" type="button">删除</button>
+                            </div>
                         </div>
                         <div class="history-content">
                             <div class="user-prompt">
@@ -3465,7 +3494,11 @@ ${bodyMatch[1]}
                             </div>
                             <div class="ai-response">
                                 <strong>🤖 AI：</strong>
-                                <div class="response-text">${escapeHtml(entry.aiResponse.substring(0, 200))}${entry.aiResponse.length > 200 ? '...' : ''}</div>
+                                <div class="response-box">
+                                    <div class="response-text-short" ${isTruncated ? '' : 'style="display:none;"'}>${escapeHtml(shortText)}${isTruncated ? '...' : ''}</div>
+                                    <div class="response-text-full" ${isTruncated ? 'style="display:none;"' : ''}>${escapeHtml(entry.aiResponse)}</div>
+                                    ${isTruncated ? `<button class="ai-history-btn history-toggle-btn" data-id="${entry.id}" type="button">查看全部</button>` : ''}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -4296,9 +4329,56 @@ ${bodyMatch[1]}
         $(document).off('click', '#view-conversation-history').on('click', '#view-conversation-history', function() {
             showConversationHistory();
         });
-        
+
         $(document).off('click', '#clear-conversation-history').on('click', '#clear-conversation-history', function() {
             clearConversationHistory();
+        });
+
+        // 历史记录：删除单条
+        $(document).off('click', '.history-delete-btn').on('click', '.history-delete-btn', function() {
+            const id = $(this).data('id');
+            const $item = $(this).closest('.history-item');
+            const doDelete = () => {
+                const ok = conversationHistory.removeEntryById(id);
+                if (ok) {
+                    // 从UI移除并更新计数
+                    $item.remove();
+                    const rest = conversationHistory.getHistory().length;
+                    const $count = $('.conversation-history-display .history-total-count');
+                    if ($count.length) $count.text(rest);
+                    // 重新编号
+                    $('.conversation-history-display .history-list .history-item').each(function(i) {
+                        $(this).find('.history-index').text(`#${i + 1}`);
+                    });
+                    showStatus('✅ 已删除一条历史记录');
+                } else {
+                    showStatus('❌ 删除失败', true);
+                }
+            };
+
+            if (typeof callGenericPopup === 'function') {
+                callGenericPopup('确认删除该条历史记录？此操作无法撤销。', POPUP_TYPE.CONFIRM, '', { okButton: '删除', cancelButton: '取消' })
+                    .then(res => { if (res) doDelete(); });
+            } else if (window.confirm('确认删除该条历史记录？此操作无法撤销。')) {
+                doDelete();
+            }
+        });
+
+        // 历史记录：展开/收起AI回复
+        $(document).off('click', '.history-toggle-btn').on('click', '.history-toggle-btn', function() {
+            const $box = $(this).closest('.ai-response').find('.response-box');
+            const $short = $box.find('.response-text-short');
+            const $full = $box.find('.response-text-full');
+            const showingFull = $full.is(':visible');
+            if (showingFull) {
+                $full.hide();
+                $short.show();
+                $(this).text('查看全部');
+            } else {
+                $short.hide();
+                $full.show();
+                $(this).text('收起');
+            }
         });
     }
     
