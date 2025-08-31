@@ -49,7 +49,9 @@
         // 对话历史设置
         enableConversationHistory: true,
         // 使用 Infinity 表示不限制历史条数
-        maxHistoryLength: Infinity
+        maxHistoryLength: Infinity,
+        // 自定义生成设置
+        customMaxTokens: 40000
     };
 
     // 扩展是否已初始化
@@ -972,7 +974,7 @@
                                 <label for="custom-model-section">模型:</label>
                                 <input type="hidden" id="custom-model" value="${extensionSettings.customModel}">
                                 <button type="button" id="fetch-custom-models" class="ai-generate-btn" style="width: 100%; padding: 0.5rem 0.75rem;">
-                                    获取模型列表
+                                    获取模型
                                 </button>
                             </div>
                         </div>
@@ -1005,10 +1007,18 @@
                             </div>
                         </div>
 
-                        <!-- 生成按钮 -->
+                        <!-- token 设置 + 生成按钮 -->
                         <div class="form-group">
-                            <button id="generate-regex" class="ai-generate-btn">
-                                生成正则表达式
+                            <label for="custom-max-tokens">最大Tokens:</label>
+                            <input type="number" id="custom-max-tokens" class="form-control" min="1" step="1"
+                                   placeholder="例如：40000" value="${Number.isFinite(extensionSettings.customMaxTokens) ? extensionSettings.customMaxTokens : 40000}">
+                            <small style="color: var(--SmartThemeQuoteColor); font-size: 0.75rem;">
+                                默认 40000。用于生成请求的 max_tokens。
+                            </small>
+                        </div>
+                        <div class="form-group">
+                            <button id="generate-regex-2" class="ai-generate-btn" style="width: 100%;">
+                                生成
                             </button>
                         </div>
 
@@ -3359,6 +3369,7 @@ ${bodyMatch[1]}
             const customUrl = document.getElementById('custom-api-url')?.value;
             const customKey = document.getElementById('custom-api-key')?.value;
             const customModel = document.getElementById('custom-model')?.value;
+            const customMaxTokens = parseInt(document.getElementById('custom-max-tokens')?.value || '40000', 10);
 
             // 构建配置对象
             const config = {
@@ -3368,6 +3379,7 @@ ${bodyMatch[1]}
                 customApiUrl: customUrl || extensionSettings.customApiUrl,
                 customApiKey: customKey || extensionSettings.customApiKey,
                 customModel: customModel || extensionSettings.customModel,
+                customMaxTokens: Number.isFinite(customMaxTokens) ? customMaxTokens : (extensionSettings.customMaxTokens || 40000),
                 lastSaved: new Date().toISOString()
             };
 
@@ -3382,6 +3394,7 @@ ${bodyMatch[1]}
             if (customUrl) extensionSettings.customApiUrl = customUrl;
             if (customKey) extensionSettings.customApiKey = customKey;
             if (customModel) extensionSettings.customModel = customModel;
+            if (Number.isFinite(customMaxTokens)) extensionSettings.customMaxTokens = customMaxTokens;
 
             // 保存到SillyTavern全局设置
             saveSettings();
@@ -3414,7 +3427,8 @@ ${bodyMatch[1]}
                     defaultModel: config.defaultModel || extensionSettings.defaultModel,
                     customApiUrl: config.customApiUrl || extensionSettings.customApiUrl,
                     customApiKey: config.customApiKey || extensionSettings.customApiKey,
-                    customModel: config.customModel || extensionSettings.customModel
+                    customModel: config.customModel || extensionSettings.customModel,
+                    customMaxTokens: Number.isFinite(config.customMaxTokens) ? config.customMaxTokens : (extensionSettings.customMaxTokens || 40000)
                 });
 
                 return true;
@@ -4097,10 +4111,16 @@ ${bodyMatch[1]}
 
         // 在按钮后面插入下拉菜单
         const fetchButtonId = modelType === 'gemini' ? 'fetch-gemini-models' : 'fetch-custom-models';
-        const fetchButton = document.getElementById(fetchButtonId);
-        if (fetchButton && fetchButton.nextSibling) {
-            modelContainer.insertBefore(selectElement, fetchButton.nextSibling);
-        } else {
+        let fetchButton = document.getElementById(fetchButtonId);
+        // 安全插入：仅当该按钮的父节点正是 modelContainer 时，才用 insertBefore；否则直接 append
+        try {
+            if (fetchButton && fetchButton.parentElement === modelContainer) {
+                modelContainer.insertBefore(selectElement, fetchButton.nextSibling /* can be null to append */);
+            } else {
+                modelContainer.appendChild(selectElement);
+            }
+        } catch (e) {
+            console.warn(`[${EXTENSION_NAME}] 下拉插入回退:`, e);
             modelContainer.appendChild(selectElement);
         }
 
@@ -4224,7 +4244,41 @@ ${bodyMatch[1]}
             fetchButton.disabled = true;
 
             // 调用获取模型函数
-            const models = await fetchCustomModels(customUrl, customKey);
+            let models = [];
+            try {
+                models = await fetchCustomModels(customUrl, customKey);
+            } catch (e) {
+                // 兜底：如果上游解析不兼容，改为直接用 V2 方案再尝试一次
+                console.warn(`[${EXTENSION_NAME}] 标准方案解析失败，尝试方案二兜底:`, e);
+                const csrfToken = await getCsrfToken();
+                const resp = await fetch('/api/backends/chat-completions/status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+                    body: JSON.stringify({
+                        reverse_proxy: customUrl,
+                        proxy_password: customKey,
+                        chat_completion_source: 'custom',
+                        custom_url: customUrl,
+                        custom_include_headers: ''
+                    }),
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    let rawModels = [];
+                    if (Array.isArray(data?.data)) rawModels = data.data; else
+                    if (Array.isArray(data?.models)) rawModels = data.models; else
+                    if (Array.isArray(data)) rawModels = data; else {
+                        for (const val of Object.values(data || {})) { if (Array.isArray(val)) { rawModels = val; break; } }
+                    }
+                    models = (rawModels || []).map(m => {
+                        if (typeof m === 'string') return { id: m, name: m };
+                        const id = m?.id || m?.name || m?.model || m?.slug;
+                        const name = m?.displayName || m?.name || m?.id || id;
+                        const created = typeof m?.created === 'number' ? m.created : undefined;
+                        return id ? { id, name, created } : null;
+                    }).filter(Boolean);
+                }
+            }
             console.log(`[${EXTENSION_NAME}] 获取到 ${models.length} 个模型`);
 
             if (models.length === 0) {
@@ -4288,6 +4342,296 @@ ${bodyMatch[1]}
     }
 
     /**
+     * 生成请求（方案二）：通过 /api/backends/chat-completions/generate 携带 reverse_proxy + proxy_password
+     * 不写入 secrets，支持自定义 max_tokens
+     */
+    async function handleAIGenerateV2() {
+        try {
+            const provider = document.getElementById('ai-provider')?.value || 'gemini';
+
+            const apiUrl = document.getElementById('custom-api-url')?.value?.trim();
+            const apiKey = document.getElementById('custom-api-key')?.value?.trim();
+            const model = document.getElementById('custom-model')?.value?.trim() || extensionSettings.customModel || 'gpt-4o-mini';
+            const prompt = document.getElementById('ai-prompt')?.value?.trim();
+            const maxTokensInput = parseInt(document.getElementById('custom-max-tokens')?.value || '40000', 10);
+            const maxTokens = Number.isFinite(maxTokensInput) ? maxTokensInput : 40000;
+
+            // 对不同提供商的前置校验
+            if (provider === 'custom') {
+                if (!apiUrl || !apiKey) {
+                    showStatus('请输入API URL和API Key', true);
+                    return;
+                }
+            }
+            if (!prompt) {
+                showStatus('请输入生成需求描述', true);
+                return;
+            }
+
+            const normalizedBaseUrl = normalizeApiBaseUrl(apiUrl);
+
+            // 构建系统提示词（沿用现有规则）
+            const systemPrompt = `你是一个专业的正则表达式专家，专门为角色扮演游戏创建状态栏文本处理规则。请根据用户的需求生成合适的正则表达式和替换内容。\n\n` +
+                `严格分四段输出（不加解释）：\n=== 正则表达式 ===\n...\n\n=== 状态栏XML格式 ===\n...\n\n=== 示例正文内容 ===\n...\n\n=== HTML美化内容 ===\n...`;
+
+            // 构建历史消息（OpenAI格式）
+            const historyMessages = conversationHistory.buildConversationContext(prompt, 'openai');
+            const messages = [
+                { role: 'system', content: systemPrompt },
+                ...historyMessages,
+                { role: 'user', content: prompt },
+            ];
+
+            const csrfToken = await getCsrfToken();
+
+            // 构建请求体（遵循你的示例字段）
+            const body = {
+                messages,
+                model,
+                temperature: 0,
+                frequency_penalty: 0,
+                presence_penalty: 0.12,
+                top_p: 0.69,
+                max_tokens: maxTokens,
+                stream: false,
+                chat_completion_source: 'openai',
+                group_names: [],
+                include_reasoning: false,
+                reasoning_effort: 'medium',
+                enable_web_search: false,
+                request_images: false,
+                custom_prompt_post_processing: 'strict',
+                reverse_proxy: normalizedBaseUrl,
+                proxy_password: apiKey,
+            };
+
+            const generateBtn2 = document.getElementById('generate-regex-2');
+            if (generateBtn2) { generateBtn2.disabled = true; generateBtn2.textContent = '生成中...'; }
+
+            // 如果为自定义端点，走本地代理 + 反代；如果为Gemini，直接调用Gemini
+            let text = '';
+            if (provider === 'custom') {
+                const response = await fetch('/api/backends/chat-completions/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': csrfToken,
+                    },
+                    body: JSON.stringify(body),
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}\n${errorText}`);
+                }
+
+                const data = await response.json();
+                if (data.error && !Array.isArray(data?.data)) {
+                    let errorMessage = data.message || '未知错误';
+                    let errorDetails = '';
+                    if (data.data && typeof data.data === 'object') {
+                        if (data.data.error) errorDetails = ` - ${data.data.error}`;
+                        if (data.data.message) errorDetails += ` - ${data.data.message}`;
+                    }
+                    throw new Error(`SillyTavern API错误: ${errorMessage}${errorDetails}`);
+                }
+
+                text = data?.choices?.[0]?.message?.content || '';
+            } else if (provider === 'gemini') {
+                const geminiKey = document.getElementById('gemini-api-key')?.value?.trim();
+                const geminiModel = document.getElementById('gemini-model')?.value?.trim() || extensionSettings.defaultModel || 'gemini-1.5-flash';
+                if (!geminiKey) {
+                    throw new Error('请输入Gemini API Key');
+                }
+                text = await callGeminiAPI(prompt, geminiKey, geminiModel);
+            } else {
+                throw new Error('请选择有效的API提供商');
+            }
+
+            if (!text) throw new Error('未获取到模型输出');
+
+            // 记录历史
+            conversationHistory.addToHistory(prompt, text);
+
+            // 显示到UI
+            const rawEl = document.getElementById('ai-raw-response');
+            if (rawEl) rawEl.value = text;
+            const { regexPattern, replacementContent, exampleContent } = parseAIResponse(text) || {};
+            const patEl = document.getElementById('ai-generated-pattern');
+            const repEl = document.getElementById('ai-generated-replacement');
+            if (patEl) patEl.value = regexPattern || '';
+            if (repEl) repEl.value = replacementContent || '';
+            if (exampleContent) {
+                const contentTextarea = document.getElementById('demo-text');
+                if (contentTextarea) contentTextarea.value = exampleContent;
+            }
+            const section = document.querySelector('.ai-result-section');
+            if (section) section.style.display = 'block';
+
+            showStatus('生成完成', false);
+            if (toastr) toastr.success('生成成功', '完成');
+
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 生成（二）失败:`, error);
+            showStatus(`生成失败: ${error.message}`, true);
+            if (toastr) toastr.error('生成（二）失败', '错误');
+        } finally {
+            const generateBtn2 = document.getElementById('generate-regex-2');
+            if (generateBtn2) { generateBtn2.disabled = false; generateBtn2.textContent = '生成'; }
+        }
+    }
+
+    /**
+     * 处理获取自定义模型列表（方案二：使用 reverse_proxy + proxy_password 直传）
+     */
+    async function handleFetchCustomModelsV2() {
+        console.log(`[${EXTENSION_NAME}] 开始获取自定义模型列表（方案二）`);
+
+        const btnId = 'fetch-custom-models';
+        try {
+            const customUrlRaw = document.getElementById('custom-api-url')?.value?.trim();
+            const customKey = document.getElementById('custom-api-key')?.value?.trim();
+            const fetchButton = document.getElementById(btnId);
+
+            if (!customUrlRaw) {
+                showStatus('❌ 请先输入API基础URL', true);
+                return;
+            }
+
+            if (!customKey) {
+                showStatus('❌ 请先输入API Key', true);
+                return;
+            }
+
+            // 规范化URL
+            const customUrl = normalizeApiBaseUrl(customUrlRaw);
+
+            // 显示加载状态
+            const originalText = fetchButton?.textContent;
+            if (fetchButton) {
+                fetchButton.textContent = '获取中...';
+                fetchButton.disabled = true;
+            }
+
+            // 获取CSRF令牌
+            const csrfToken = await getCsrfToken();
+
+            // 调用SillyTavern本地状态端点（传入 reverse_proxy + proxy_password + custom_url + Authorization 覆盖头）
+            let response = await fetch('/api/backends/chat-completions/status', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken,
+                },
+                body: JSON.stringify({
+                    reverse_proxy: customUrl,           // 当前网页URL + /api/backends/... 已由相对路径处理
+                    proxy_password: customKey,          // 使用输入的 Key
+                    chat_completion_source: 'custom',
+                    custom_url: customUrl,
+                    // 通过自定义头覆盖 Authorization，这对 CUSTOM 分支生效
+                    custom_include_headers: `Authorization: Bearer ${customKey}`
+                }),
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${response.statusText}\n${errorText}`);
+            }
+
+            let data = await response.json();
+            console.log(`[${EXTENSION_NAME}] 方案二模型列表响应:`, data);
+
+            // 有些后端会返回 { error: true, data: [...] } 的结构；
+            // 如果 data.data 是数组，就优先按成功处理；否则再按 error 处理。
+            if (data.error && !Array.isArray(data?.data) && !Array.isArray(data?.models) && !Array.isArray(data?.data?.data)) {
+                let errorMessage = data.message || '未知错误';
+                let errorDetails = '';
+                if (data.data && typeof data.data === 'object') {
+                    if (data.data.error) errorDetails = ` - ${data.data.error}`;
+                    if (data.data.message) errorDetails += ` - ${data.data.message}`;
+                }
+                const fullErrorMessage = `SillyTavern API错误: ${errorMessage}${errorDetails}`;
+                console.warn(`[${EXTENSION_NAME}] 自定义分支返回错误，尝试以 openai 分支重试:`, fullErrorMessage);
+                // 回退：以 openai 分支再试一次，使其使用 reverse_proxy + proxy_password
+                response = await fetch('/api/backends/chat-completions/status', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': csrfToken,
+                    },
+                    body: JSON.stringify({
+                        reverse_proxy: customUrl,
+                        proxy_password: customKey,
+                        chat_completion_source: 'openai',
+                    }),
+                });
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}\n${errorText}`);
+                }
+                data = await response.json();
+                console.log(`[${EXTENSION_NAME}] openai 分支回退响应:`, data);
+            }
+
+            // 解析多种常见返回结构
+            /** @type {any[]} */
+            let rawModels = [];
+            if (Array.isArray(data?.data)) {
+                rawModels = data.data;
+            } else if (Array.isArray(data?.models)) {
+                rawModels = data.models;
+            } else if (Array.isArray(data)) {
+                rawModels = data;
+            } else if (Array.isArray(data?.data?.data)) {
+                rawModels = data.data.data;
+            } else {
+                // 兜底：在对象里找第一个数组字段作为候选（如 { object:'list', data:[...] } 已在上方覆盖）
+                for (const val of Object.values(data || {})) {
+                    if (Array.isArray(val)) { rawModels = val; break; }
+                }
+            }
+
+            /** @type {{id:string,name?:string,created?:number}[]} */
+            const models = (rawModels || [])
+                .filter(m => m && (typeof m === 'string' || typeof m === 'object'))
+                .map(m => {
+                    if (typeof m === 'string') return { id: m, name: m };
+                    const id = m.id || m.name || m.model || m.slug;
+                    const name = m.displayName || m.name || m.id || id;
+                    const created = typeof m.created === 'number' ? m.created : undefined;
+                    return id ? { id, name, created } : null;
+                })
+                .filter(Boolean);
+
+            if (models.length === 0) {
+                showStatus('⚠️ 未找到任何可用模型', false);
+            } else {
+                createModelSelectDropdown(models, 'custom');
+                if (toastr) toastr.success(`成功获取 ${models.length} 个自定义API模型`, '成功');
+                showStatus(`✅ 获取到 ${models.length} 个模型，请从下拉菜单中选择`);
+                autoSaveAPIConfig();
+            }
+
+        } catch (error) {
+            console.error(`[${EXTENSION_NAME}] 方案二获取模型失败:`, error);
+            const errorMessage = `获取自定义API模型列表失败（方案二）：\n\n${error.message}\n\n请检查：\n• API基础URL是否正确\n• API Key是否有效\n• 目标端点是否支持 /models\n• 如走反代，请确认反代稳定`;
+            if (callGenericPopup) {
+                try {
+                    await callGenericPopup(errorMessage, POPUP_TYPE.TEXT, '', { wide: false, large: false, allowVerticalScrolling: true });
+                } catch {}
+            }
+            if (toastr) toastr.error('获取自定义API模型失败', '错误');
+            showStatus(`❌ 获取模型失败: ${error.message}`, true);
+        } finally {
+            const fetchButton = document.getElementById(btnId);
+            if (fetchButton) {
+                fetchButton.textContent = '获取模型';
+                fetchButton.disabled = false;
+            }
+        }
+    }
+
+    /**
      * 绑定AI相关事件
      */
     function bindAIEvents() {
@@ -4299,15 +4643,14 @@ ${bodyMatch[1]}
         });
         
         // API配置自动保存
-        const apiConfigSelectors = '#gemini-api-key, #gemini-model, #custom-api-url, #custom-api-key, #custom-model';
+        const apiConfigSelectors = '#gemini-api-key, #gemini-model, #custom-api-url, #custom-api-key, #custom-model, #custom-max-tokens';
         $(document).off('input change', apiConfigSelectors).on('input change', apiConfigSelectors, function() {
             autoSaveAPIConfig();
         });
+        // 移除任何可能残留的标准生成按钮绑定
+        $(document).off('click', '#generate-regex');
         
-        // AI生成按钮
-        $(document).off('click', '#generate-regex').on('click', '#generate-regex', function() {
-            handleAIGenerate();
-        });
+        // 移除标准生成按钮（仅保留“生成”= 方案二）
         
         // 预览AI结果
         $(document).off('click', '#preview-ai-result').on('click', '#preview-ai-result', function() {
@@ -4324,9 +4667,13 @@ ${bodyMatch[1]}
             handleFetchGeminiModels();
         });
         
-        // 获取自定义模型列表
+        // 获取自定义模型列表（仅保留方案二实现）
         $(document).off('click', '#fetch-custom-models').on('click', '#fetch-custom-models', function() {
-            handleFetchCustomModels();
+            handleFetchCustomModelsV2();
+        });
+        // 生成（二）
+        $(document).off('click', '#generate-regex-2').on('click', '#generate-regex-2', function() {
+            handleAIGenerateV2();
         });
         
         // 对话历史管理
