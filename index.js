@@ -1440,29 +1440,13 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
             const data = await response.json();
             console.log(`[${EXTENSION_NAME}] Gemini模型列表响应:`, data);
 
-            // 解析Gemini模型列表
-            if (data.models && Array.isArray(data.models)) {
-                const models = data.models
-                    .filter(model => {
-                        // 过滤掉不支持生成内容的模型
-                        return model.supportedGenerationMethods &&
-                               model.supportedGenerationMethods.includes('generateContent');
-                    })
-                    .map(model => ({
-                        id: model.name.replace('models/', ''), // 移除'models/'前缀
-                        name: model.displayName || model.name.replace('models/', ''),
-                        description: model.description,
-                        version: model.version,
-                        inputTokenLimit: model.inputTokenLimit,
-                        outputTokenLimit: model.outputTokenLimit
-                    }))
-                    .sort((a, b) => a.name.localeCompare(b.name)); // 按名称排序
-
-                console.log(`[${EXTENSION_NAME}] 解析得到 ${models.length} 个可用的Gemini模型`);
-                return models;
-            } else {
+            // 使用统一解析器归一化
+            const models = parseOpenAIModelsResponse(data);
+            console.log(`[${EXTENSION_NAME}] 解析得到 ${models.length} 个可用的Gemini模型`);
+            if (!Array.isArray(models) || models.length === 0) {
                 throw new Error('无法解析Gemini模型列表响应格式');
             }
+            return models;
 
         } catch (error) {
             console.error(`[${EXTENSION_NAME}] 获取Gemini模型列表失败:`, error);
@@ -1499,6 +1483,105 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
 
         console.log(`[${EXTENSION_NAME}] 标准化API URL: ${baseUrl} -> ${normalized}`);
         return normalized;
+    }
+
+    /**
+     * 解析 OpenAI 兼容接口的模型列表响应，输出为标准数组
+     * 模仿 SillyTavern 的容错做法：尽量从各种常见结构中提取数组，并宽松映射出 { id, name?, created? }
+     *
+     * 支持的输入形态示例：
+     * - 顶层数组: ["gpt-4o-mini", { id: "gpt-4o" }, ...]
+     * - OpenAI 标准: { object: 'list', data: [ { id: '...' }, ... ] }
+     * - 一些网关: { models: [ { id/name/model/slug/... }, ... ] }
+     * - 更深层嵌套: { data: { data: [...] } }
+     * - 兜底: 对象内第一个数组字段
+     *
+     * @param {any} data 上游返回的 JSON
+     * @returns {Array<{id: string, name?: string, created?: number, description?: string, version?: string, inputTokenLimit?: number, outputTokenLimit?: number}>}
+     */
+    function parseOpenAIModelsResponse(data) {
+        /** @type {any[]} */
+        let rawModels = [];
+
+        try {
+            // 1) 顶层数组
+            if (Array.isArray(data)) {
+                rawModels = data;
+            }
+            // 2) 常见包装 { data: [...] }
+            else if (Array.isArray(data?.data)) {
+                rawModels = data.data;
+            }
+            // 3) { models: [...] }
+            else if (Array.isArray(data?.models)) {
+                rawModels = data.models;
+            }
+            // 4) 更深层 { data: { data: [...] } }
+            else if (Array.isArray(data?.data?.data)) {
+                rawModels = data.data.data;
+            }
+            // 5) 兜底：对象内第一个数组字段
+            else if (data && typeof data === 'object') {
+                for (const val of Object.values(data)) {
+                    if (Array.isArray(val)) { rawModels = val; break; }
+                }
+            }
+        } catch {
+            // ignore extraction errors; will return empty below
+        }
+
+        // MakerSuite/Gemini 专用过滤：若对象包含 supportedGenerationMethods，则仅保留包含 'generateContent' 的模型
+        try {
+            rawModels = (rawModels || []).filter(m => {
+                const methods = m && typeof m === 'object' ? m.supportedGenerationMethods : undefined;
+                return Array.isArray(methods) ? methods.includes('generateContent') : true;
+            });
+        } catch {
+            // ignore filter errors
+        }
+
+        // 映射与归一化
+        /** @type {Array<{id: string, name?: string, created?: number, description?: string, version?: string, inputTokenLimit?: number, outputTokenLimit?: number}>} */
+        let models = (rawModels || [])
+            .filter(m => m && (typeof m === 'string' || typeof m === 'object'))
+            .map(m => {
+                if (typeof m === 'string') {
+                    return { id: m, name: m };
+                }
+
+                // 兼容多字段 id
+                let id = m.id || m.name || m.model || m.slug || '';
+
+                // 去掉常见前缀，例如 Google 风格的 'models/'
+                if (typeof id === 'string' && id.startsWith('models/')) {
+                    id = id.replace(/^models\//, '');
+                }
+
+                const name = m.displayName || m.name || m.id || id || undefined;
+                const created = typeof m.created === 'number' ? m.created : undefined;
+
+                // 保留一些可能用得到的附加信息以便 UI 提示
+                const description = typeof m.description === 'string' ? m.description : undefined;
+                const version = typeof m.version === 'string' ? m.version : undefined;
+                const inputTokenLimit = typeof m.inputTokenLimit === 'number' ? m.inputTokenLimit : undefined;
+                const outputTokenLimit = typeof m.outputTokenLimit === 'number' ? m.outputTokenLimit : undefined;
+
+                return id ? { id, name, created, description, version, inputTokenLimit, outputTokenLimit } : null;
+            })
+            .filter(Boolean);
+
+        // 去重（按 id）
+        const seen = new Set();
+        models = models.filter(m => {
+            if (seen.has(m.id)) return false;
+            seen.add(m.id);
+            return true;
+        });
+
+        // 排序（按 id 升序）
+        models.sort((a, b) => a.id.localeCompare(b.id));
+
+        return models;
     }
 
     // 持久化缓存API Key，避免页面刷新后重复设置
@@ -1685,50 +1768,28 @@ AI：我今天心情不错，准备和朋友一起出去逛街。你有什么计
             const data = await response.json();
             console.log(`[${EXTENSION_NAME}] 模型列表响应:`, data);
 
-            // 检查是否有错误
-            if (data.error) {
-                console.error(`[${EXTENSION_NAME}] SillyTavern API错误:`, data);
-
+            if (data?.error && !Array.isArray(data?.data) && !Array.isArray(data?.models) && !Array.isArray(data?.data?.data)) {
                 // 构建更详细的错误信息，包含可能的认证错误关键词
                 let errorMessage = data.message || '未知错误';
                 let errorDetails = '';
-
-                // 检查具体的错误信息
                 if (data.data && typeof data.data === 'object') {
-                    if (data.data.error) {
-                        errorDetails = ` - ${data.data.error}`;
-                    }
-                    if (data.data.message) {
-                        errorDetails += ` - ${data.data.message}`;
-                    }
+                    if (data.data.error) errorDetails = ` - ${data.data.error}`;
+                    if (data.data.message) errorDetails += ` - ${data.data.message}`;
                 }
-
                 const fullErrorMessage = `SillyTavern API错误: ${errorMessage}${errorDetails}`;
                 console.error(`[${EXTENSION_NAME}] 完整错误信息:`, fullErrorMessage);
-
                 throw new Error(fullErrorMessage);
             }
 
-            // 解析模型列表
-            if (data.data && Array.isArray(data.data)) {
-                return data.data.map(model => ({
-                    id: model.id,
-                    name: model.id,
-                    created: model.created
-                }));
-            } else if (Array.isArray(data)) {
-                return data.map(model => ({
-                    id: typeof model === 'string' ? model : model.id,
-                    name: typeof model === 'string' ? model : model.id
-                }));
-            } else {
-                throw new Error('无法解析模型列表响应格式');
-            }
+            // 使用统一解析器
+            const models = parseOpenAIModelsResponse(data);
+            if (models.length === 0) throw new Error('无法解析模型列表响应格式');
+            return models;
 
         } catch (error) {
             // 如果是认证错误，清除缓存
             handleApiFailure(error);
-        }
+    }
     }
 
     /**
@@ -4624,34 +4685,8 @@ ${bodyMatch[1]}
             }
 
             // 解析多种常见返回结构
-            /** @type {any[]} */
-            let rawModels = [];
-            if (Array.isArray(data?.data)) {
-                rawModels = data.data;
-            } else if (Array.isArray(data?.models)) {
-                rawModels = data.models;
-            } else if (Array.isArray(data)) {
-                rawModels = data;
-            } else if (Array.isArray(data?.data?.data)) {
-                rawModels = data.data.data;
-            } else {
-                // 兜底：在对象里找第一个数组字段作为候选（如 { object:'list', data:[...] } 已在上方覆盖）
-                for (const val of Object.values(data || {})) {
-                    if (Array.isArray(val)) { rawModels = val; break; }
-                }
-            }
-
-            /** @type {{id:string,name?:string,created?:number}[]} */
-            const models = (rawModels || [])
-                .filter(m => m && (typeof m === 'string' || typeof m === 'object'))
-                .map(m => {
-                    if (typeof m === 'string') return { id: m, name: m };
-                    const id = m.id || m.name || m.model || m.slug;
-                    const name = m.displayName || m.name || m.id || id;
-                    const created = typeof m.created === 'number' ? m.created : undefined;
-                    return id ? { id, name, created } : null;
-                })
-                .filter(Boolean);
+            // 使用统一解析器
+            const models = parseOpenAIModelsResponse(data);
 
             if (models.length === 0) {
                 showStatus('⚠️ 未找到任何可用模型', false);
